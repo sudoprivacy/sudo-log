@@ -213,6 +213,11 @@ label {
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
   zoom: var(--ui-scale);
+  transition: grid-template-columns 160ms ease;
+}
+
+.app.sidebar-collapsed {
+  grid-template-columns: 56px minmax(0, 1fr);
 }
 
 .sidebar {
@@ -226,6 +231,40 @@ label {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 22px;
+  overflow: hidden;
+  transition:
+    padding 160ms ease,
+    gap 160ms ease;
+}
+
+.sidebar-header {
+  min-width: 0;
+  justify-content: space-between;
+}
+
+.sidebar-title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.sidebar-toggle {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(217, 226, 242, 0.22);
+  border-radius: 7px;
+  background: #182338;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 23px;
+  font-weight: 760;
+  line-height: 1;
+}
+
+.sidebar-toggle:hover {
+  background: #263449;
 }
 
 .nav {
@@ -241,8 +280,19 @@ label {
   padding: 10px 12px;
   background: transparent;
   color: #d9e2f2;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 40px;
   text-align: left;
   font-weight: 680;
+  white-space: nowrap;
+}
+
+.nav-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nav-button.active {
@@ -254,6 +304,21 @@ label {
   display: grid;
   gap: 10px;
   align-self: end;
+}
+
+.app.sidebar-collapsed .sidebar {
+  padding: 18px 12px;
+  gap: 0;
+}
+
+.app.sidebar-collapsed .sidebar-header {
+  justify-content: center;
+}
+
+.app.sidebar-collapsed .sidebar-title,
+.app.sidebar-collapsed .nav,
+.app.sidebar-collapsed .sidebar-footer {
+  display: none;
 }
 
 .workspace {
@@ -793,25 +858,6 @@ tbody tr:hover {
   background: var(--panel);
 }
 
-.dashboard-panel header {
-  border-bottom: 1px solid var(--line);
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.dashboard-panel h2 {
-  margin: 0;
-  font-size: 14px;
-}
-
-.dashboard-panel header span {
-  color: var(--muted);
-  font-size: 11px;
-}
-
 .dashboard-panel iframe {
   display: block;
   width: 100%;
@@ -1066,7 +1112,8 @@ pre {
 }
 
 @media (max-width: 1180px) {
-  .app {
+  .app,
+  .app.sidebar-collapsed {
     grid-template-columns: 1fr;
   }
 

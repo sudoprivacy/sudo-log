@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'sudo-log-access-token';
+const SIDEBAR_COLLAPSED_KEY = 'sudo-log-sidebar-collapsed';
 const DEFAULT_TENANT_ID = 'sudo';
 const DEFAULT_PRODUCT_ID = 'sudowork';
 const DEFAULT_PAGE_SIZE = 20;
@@ -7,6 +8,7 @@ const PAGE_SIZE_OPTIONS = [20, 50, 100];
 const state = {
   token: localStorage.getItem(TOKEN_KEY) || '',
   user: null,
+  sidebarCollapsed: localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1',
   rows: [],
   errorGroups: [],
   users: [],
@@ -43,6 +45,7 @@ const ids = [
   'loginError',
   'currentUser',
   'logoutButton',
+  'sidebarToggle',
   'runQuery',
   'panelManagerOpen',
   'panelManagerBack',
@@ -786,11 +789,7 @@ function renderDashboardPanels(panels) {
     if (!iframeUrl) continue;
     const article = document.createElement('article');
     article.className = 'dashboard-panel';
-    article.innerHTML = `<header>
-      <h2>${escapeHtml(panel.title || panel.id || 'Panel')}</h2>
-      <span class="mono">${escapeHtml(panel.id || '')}</span>
-    </header>
-    <iframe
+    article.innerHTML = `<iframe
       title="${escapeHtml(panel.title || panel.id || 'Grafana panel')}"
       src="${escapeHtml(iframeUrl)}"
       data-src="${escapeHtml(iframeUrl)}"
@@ -1663,6 +1662,17 @@ function moveTextDialogMatch(direction) {
   renderTextDialogContent();
 }
 
+function setSidebarCollapsed(collapsed) {
+  state.sidebarCollapsed = collapsed;
+  el.appView.classList.toggle('sidebar-collapsed', collapsed);
+  el.sidebarToggle.textContent = collapsed ? '›' : '‹';
+  const label = collapsed ? '展开左侧菜单' : '收起左侧菜单';
+  el.sidebarToggle.setAttribute('aria-label', label);
+  el.sidebarToggle.setAttribute('title', label);
+  el.sidebarToggle.setAttribute('aria-expanded', String(!collapsed));
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0');
+}
+
 function setView(view) {
   if (view === 'users' && state.user && !hasPermission('users:manage')) view = 'discover';
   if (view === 'settings' && state.user && !hasPermission('settings:write')) view = 'discover';
@@ -1778,6 +1788,7 @@ function bindEvents() {
     renderPaginatedList(key);
   });
   el.logoutButton.addEventListener('click', logout);
+  el.sidebarToggle.addEventListener('click', () => setSidebarCollapsed(!state.sidebarCollapsed));
   el.panelManagerOpen.addEventListener('click', () => setView('panelManager'));
   el.panelManagerBack.addEventListener('click', () => setView('dashboard'));
   el.runQuery.addEventListener('click', () => {
@@ -1833,6 +1844,7 @@ function init() {
   setDefaultTimeRange();
   setDashboardRangeOptions(DASHBOARD_TIME_RANGES, 'now-6h');
   resetCustomPanelForm();
+  setSidebarCollapsed(state.sidebarCollapsed);
   bindEvents();
   setView(state.activeView);
   loadMe();
