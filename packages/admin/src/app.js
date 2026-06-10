@@ -1,6 +1,8 @@
 const TOKEN_KEY = 'sudo-log-access-token';
 const DEFAULT_TENANT_ID = 'sudo';
 const DEFAULT_PRODUCT_ID = 'sudowork';
+const DEFAULT_PAGE_SIZE = 20;
+const PAGE_SIZE_OPTIONS = [20, 50, 100];
 
 const state = {
   token: localStorage.getItem(TOKEN_KEY) || '',
@@ -11,6 +13,13 @@ const state = {
   tenants: [],
   expandedTenants: new Set(),
   activeView: 'dashboard',
+  pagination: {
+    events: { page: 1, pageSize: DEFAULT_PAGE_SIZE },
+    errors: { page: 1, pageSize: DEFAULT_PAGE_SIZE },
+    customPanels: { page: 1, pageSize: DEFAULT_PAGE_SIZE },
+    settings: { page: 1, pageSize: DEFAULT_PAGE_SIZE },
+    users: { page: 1, pageSize: DEFAULT_PAGE_SIZE },
+  },
   grafana: {
     config: null,
     loading: false,
@@ -95,6 +104,7 @@ const ids = [
   'customPanelError',
   'customPanelsBody',
   'customPanelsEmpty',
+  'customPanelsPagination',
   'dashboardPanels',
   'dashboardEmpty',
   'systemView',
@@ -102,13 +112,17 @@ const ids = [
   'settingsView',
   'eventsBody',
   'eventsEmpty',
+  'eventsPagination',
   'errorsBody',
   'errorsEmpty',
+  'errorsPagination',
   'systemBody',
   'usersBody',
   'usersEmpty',
+  'usersPagination',
   'settingsBody',
   'settingsEmpty',
+  'settingsPagination',
   'createTenantForm',
   'newTenantId',
   'newTenantName',
@@ -357,6 +371,67 @@ async function api(path, options = {}) {
   return data;
 }
 
+function resetPagination(...keys) {
+  for (const key of keys) {
+    if (state.pagination[key]) state.pagination[key].page = 1;
+  }
+}
+
+function normalizePageSize(value) {
+  const pageSize = Number(value);
+  return PAGE_SIZE_OPTIONS.includes(pageSize) ? pageSize : DEFAULT_PAGE_SIZE;
+}
+
+function clampPagination(key, total) {
+  const pagination = state.pagination[key];
+  if (!pagination) return { page: 1, pageSize: DEFAULT_PAGE_SIZE, totalPages: 1 };
+  pagination.pageSize = normalizePageSize(pagination.pageSize);
+  const totalPages = Math.max(1, Math.ceil(total / pagination.pageSize));
+  pagination.page = Math.min(Math.max(Number(pagination.page) || 1, 1), totalPages);
+  return { ...pagination, totalPages };
+}
+
+function paginatedItems(key, items) {
+  const list = Array.isArray(items) ? items : [];
+  const { page, pageSize } = clampPagination(key, list.length);
+  const start = (page - 1) * pageSize;
+  return list.slice(start, start + pageSize);
+}
+
+function renderPagination(key, total) {
+  const container = el[`${key}Pagination`];
+  if (!container) return;
+  if (!total) {
+    container.innerHTML = '';
+    container.classList.add('hidden');
+    return;
+  }
+
+  const { page, pageSize, totalPages } = clampPagination(key, total);
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(total, page * pageSize);
+  container.classList.remove('hidden');
+  container.innerHTML = `
+    <div class="pagination-summary">共 ${total} 条 · ${start}-${end} · 第 ${page}/${totalPages} 页</div>
+    <div class="pagination-controls">
+      <label class="pagination-size">每页
+        <select data-pagination-size="${escapeHtml(key)}">
+          ${PAGE_SIZE_OPTIONS.map((option) => `<option value="${option}"${option === pageSize ? ' selected' : ''}>${option}</option>`).join('')}
+        </select>
+      </label>
+      <button class="secondary small pagination-button" type="button" title="上一页" aria-label="上一页" data-pagination="${escapeHtml(key)}" data-pagination-action="prev"${page <= 1 ? ' disabled' : ''}>‹</button>
+      <button class="secondary small pagination-button" type="button" title="下一页" aria-label="下一页" data-pagination="${escapeHtml(key)}" data-pagination-action="next"${page >= totalPages ? ' disabled' : ''}>›</button>
+    </div>`;
+}
+
+function renderPaginatedList(key) {
+  if (key === 'events') renderEvents();
+  if (key === 'errors') renderErrors();
+  if (key === 'customPanels') renderCustomPanels();
+  if (key === 'settings') renderSettings();
+  if (key === 'users') renderUsers();
+}
+
 async function login(loginName, password) {
   const response = await api('/api/auth/login', {
     method: 'POST',
@@ -479,6 +554,7 @@ async function runQuery(options = {}) {
     const groups = await api(`/v1/logs/errors/summary?${queryParams(true, options).toString()}`);
     state.rows = rows.data || [];
     state.errorGroups = groups.data || [];
+    resetPagination('events', 'errors');
     renderAll();
   } catch (error) {
     showError(error instanceof Error ? error.message : '查询失败');
@@ -915,7 +991,7 @@ async function deleteCustomPanel(id) {
 function renderCustomPanels() {
   el.customPanelsBody.innerHTML = '';
   el.customPanelsEmpty.classList.toggle('hidden', state.grafana.customPanels.length > 0);
-  for (const panel of state.grafana.customPanels) {
+  for (const panel of paginatedItems('customPanels', state.grafana.customPanels)) {
     const tr = document.createElement('tr');
     const publishState = panel.publishError
       ? `<span class="publish-error" title="${escapeHtml(panel.publishError)}">发布失败</span>`
@@ -938,6 +1014,7 @@ function renderCustomPanels() {
       </div></td>`;
     el.customPanelsBody.appendChild(tr);
   }
+  renderPagination('customPanels', state.grafana.customPanels.length);
 }
 
 function productList(products, tenantId) {
@@ -964,7 +1041,7 @@ function renderSettings() {
   el.settingsBody.innerHTML = '';
   el.settingsEmpty.classList.toggle('hidden', state.tenants.length > 0);
 
-  for (const tenant of state.tenants) {
+  for (const tenant of paginatedItems('settings', state.tenants)) {
     const productCount = tenant.products?.length || 0;
     const expanded = state.expandedTenants.has(tenant.tenantId);
     const isDefaultTenant = tenant.tenantId === DEFAULT_TENANT_ID;
@@ -1002,6 +1079,7 @@ function renderSettings() {
       el.settingsBody.appendChild(productTr);
     }
   }
+  renderPagination('settings', state.tenants.length);
 }
 
 function toggleTenantProducts(tenantId) {
@@ -1156,7 +1234,7 @@ function renderUsers() {
   el.usersBody.innerHTML = '';
   el.usersEmpty.classList.toggle('hidden', state.users.length > 0);
 
-  for (const user of state.users) {
+  for (const user of paginatedItems('users', state.users)) {
     const isSelf = user.id === state.user?.id;
     const tr = document.createElement('tr');
     tr.dataset.userId = user.id;
@@ -1174,6 +1252,7 @@ function renderUsers() {
       </div></td>`;
     el.usersBody.appendChild(tr);
   }
+  renderPagination('users', state.users.length);
 }
 
 function userPayloadFromRow(userId) {
@@ -1308,7 +1387,7 @@ function renderEvents() {
   el.eventsBody.innerHTML = '';
   el.eventsEmpty.classList.toggle('hidden', state.rows.length > 0);
 
-  for (const row of state.rows) {
+  for (const row of paginatedItems('events', state.rows)) {
     const tr = document.createElement('tr');
     tr.innerHTML =
       `<td class="mono">${escapeHtml(formatTime(row.timestamp))}</td>` +
@@ -1322,13 +1401,14 @@ function renderEvents() {
     tr.addEventListener('click', () => openEvent(row));
     el.eventsBody.appendChild(tr);
   }
+  renderPagination('events', state.rows.length);
 }
 
 function renderErrors() {
   el.errorsBody.innerHTML = '';
   el.errorsEmpty.classList.toggle('hidden', state.errorGroups.length > 0);
 
-  for (const group of state.errorGroups) {
+  for (const group of paginatedItems('errors', state.errorGroups)) {
     const tr = document.createElement('tr');
     tr.innerHTML =
       `<td class="mono">${escapeHtml(formatTime(group.last_seen))}</td>` +
@@ -1343,6 +1423,7 @@ function renderErrors() {
     });
     el.errorsBody.appendChild(tr);
   }
+  renderPagination('errors', state.errorGroups.length);
 }
 
 async function openEvent(row) {
@@ -1676,6 +1757,25 @@ function bindEvents() {
     if (button.dataset.action === 'delete-tenant') await deleteTenant(tenantId);
     if (button.dataset.action === 'save-product' && product) await updateProduct(tenantId, product);
     if (button.dataset.action === 'delete-product' && product) await deleteProduct(tenantId, product);
+  });
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-pagination-action]');
+    if (!button || button.disabled) return;
+    const key = button.dataset.pagination;
+    const pagination = state.pagination[key];
+    if (!pagination) return;
+    pagination.page += button.dataset.paginationAction === 'next' ? 1 : -1;
+    renderPaginatedList(key);
+  });
+  document.addEventListener('change', (event) => {
+    const select = event.target.closest('select[data-pagination-size]');
+    if (!select) return;
+    const key = select.dataset.paginationSize;
+    const pagination = state.pagination[key];
+    if (!pagination) return;
+    pagination.pageSize = normalizePageSize(select.value);
+    pagination.page = 1;
+    renderPaginatedList(key);
   });
   el.logoutButton.addEventListener('click', logout);
   el.panelManagerOpen.addEventListener('click', () => setView('panelManager'));
