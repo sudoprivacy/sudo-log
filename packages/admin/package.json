@@ -1,0 +1,10 @@
+{
+  "name": "@sudo-log/admin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node dev-server.mjs",
+    "check": "node -e \"console.log('static admin assets')\""
+  }
+}

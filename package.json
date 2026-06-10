@@ -1,0 +1,26 @@
+{
+  "name": "sudo-log",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone ClickHouse-backed log system with an admin console.",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev:server",
+    "dev:server": "tsx packages/server/src/index.ts",
+    "dev:admin": "node packages/admin/dev-server.mjs",
+    "build": "tsc -p packages/server/tsconfig.json",
+    "start": "node packages/server/dist/index.js",
+    "check": "tsc -p packages/server/tsconfig.json --noEmit"
+  },
+  "engines": {
+    "node": ">=22 <26"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.1",
+    "tsx": "^4.20.6",
+    "typescript": "^5.8.3"
+  }
+}

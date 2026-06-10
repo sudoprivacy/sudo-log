@@ -1,0 +1,173 @@
+name: sudo-log
+
+services:
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.12
+    container_name: sudo-log-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: sudo_log
+      CLICKHOUSE_USER: sudo
+      CLICKHOUSE_PASSWORD: sudo_log_dev_password
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: [ "CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping | grep -q Ok" ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks:
+      - sudo-log-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: sudo-log-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks:
+      - sudo-log-network
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: sudo-log-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sudo_log
+      POSTGRES_USER: sudo
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U sudo -d sudo_log" ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks:
+      - sudo-log-network
+
+  sudo-log:
+    image: ghcr.io/sudo-ai/sudo-log:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sudo-log
+    restart: unless-stopped
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8088:8080"
+    environment:
+      SUDO_LOG_PORT: 8080
+      API_KEY_HEADER: X-API-Key
+      DEFAULT_API_KEY: sk-8f3a2b1c9d5e7f6a4b3c2d1e8f9a0b7c
+      SUDO_LOG_ADMIN_STATIC_DIR: /app/admin
+      SUDO_LOG_ADMIN_USERNAME: admin
+      SUDO_LOG_ADMIN_EMAIL: admin@sudoprivacy.com
+      SUDO_LOG_ADMIN_PASSWORD: admin123
+      SUDO_LOG_JWT_SECRET: sudo-log-dev-secret-change-me
+      SUDO_LOG_ACCESS_TOKEN_TTL_SECONDS: 28800
+      REDIS_URL: redis://redis:6379/0
+      SUDO_LOG_REDIS_KEY_PREFIX: sudo-log
+      POSTGRES_URL: postgres://sudo@postgres:5432/sudo_log
+      CLICKHOUSE_URL: http://clickhouse:8123
+      CLICKHOUSE_DATABASE: sudo_log
+      CLICKHOUSE_USER: sudo
+      CLICKHOUSE_PASSWORD: sudo_log_dev_password
+      GRAFANA_ENABLED: "true"
+      GRAFANA_PUBLIC_BASE_PATH: /grafana
+      GRAFANA_INTERNAL_URL: http://grafana:3000
+      GRAFANA_DATASOURCE_UID: sudo-log-clickhouse
+      GRAFANA_API_USER: admin
+      GRAFANA_API_PASSWORD: admin
+      GRAFANA_PUBLISH_ENABLED: "true"
+      GRAFANA_ORG_ID: "1"
+      GRAFANA_AUTH_PROXY_HEADER: X-WEBAUTH-USER
+      GRAFANA_CLICKHOUSE_DATABASE: sudo_log_grafana
+      GRAFANA_CLICKHOUSE_USER: grafana_reader
+      GRAFANA_CLICKHOUSE_PASSWORD: grafana_reader_password
+      GRAFANA_DETAIL_EVENTS_ENABLED: "false"
+      GRAFANA_DETAIL_TTL_DAYS: 7
+      GRAFANA_METRICS_TTL_DAYS: 30
+      GRAFANA_DEFAULT_TAG_KEY: feature
+      SUDO_LOG_BLOB_DIR: /data/sudo-log/blobs
+      SUDO_LOG_MAX_BODY_BYTES: 2097152
+      SUDO_LOG_QUEUE_NAME: logs
+      SUDO_LOG_QUEUE_BATCH_SIZE: 100
+      SUDO_LOG_QUEUE_POLL_INTERVAL_MS: 500
+      SUDO_LOG_QUEUE_RETRY_DELAY_MS: 3000
+    volumes:
+      - sudo-log-blobs:/data/sudo-log/blobs
+    healthcheck:
+      test: [ "CMD-SHELL", "node -e \"fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"" ]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    networks:
+      - sudo-log-network
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: sudo-log-grafana
+    restart: unless-stopped
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ALLOW_EMBEDDING: "true"
+      GF_SECURITY_COOKIE_SAMESITE: lax
+      GF_AUTH_PROXY_ENABLED: "true"
+      GF_AUTH_PROXY_HEADER_NAME: X-WEBAUTH-USER
+      GF_AUTH_PROXY_HEADER_PROPERTY: username
+      GF_AUTH_PROXY_AUTO_SIGN_UP: "true"
+      GF_USERS_AUTO_ASSIGN_ORG_ROLE: Viewer
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:8088/grafana/}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_LIVE_ALLOWED_ORIGINS: ${GRAFANA_LIVE_ALLOWED_ORIGINS:-http://localhost:8088,http://127.0.0.1:8088,http://localhost:8080,http://127.0.0.1:8080,http://localhost:5180,http://127.0.0.1:5180}
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      GRAFANA_CLICKHOUSE_DATABASE: sudo_log_grafana
+      GRAFANA_CLICKHOUSE_USER: grafana_reader
+      GRAFANA_CLICKHOUSE_PASSWORD: grafana_reader_password
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - sudo-log-network
+
+volumes:
+  clickhouse-data:
+    name: sudo-log-clickhouse-data
+  clickhouse-logs:
+    name: sudo-log-clickhouse-logs
+  redis-data:
+    name: sudo-log-redis-data
+  postgres-data:
+    name: sudo-log-postgres-data
+  sudo-log-blobs:
+    name: sudo-log-blobs
+  grafana-data:
+    name: sudo-log-grafana-data
+
+networks:
+  sudo-log-network:
+    name: sudo-log-network
+    driver: bridge
