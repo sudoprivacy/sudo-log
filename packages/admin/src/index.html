@@ -32,20 +32,21 @@
 
     <main id="appView" class="app hidden">
       <aside class="sidebar">
-        <div class="brand-row compact">
-          <strong>Sudo Log</strong>
+        <div class="brand-row compact sidebar-header">
+          <strong class="sidebar-title">Sudo Log</strong>
+          <button id="sidebarToggle" class="sidebar-toggle" type="button" aria-label="收起左侧菜单" title="收起左侧菜单" aria-expanded="true">‹</button>
         </div>
         <nav class="nav">
-          <button class="nav-button active" data-view="dashboard">Dashboard</button>
-          <button class="nav-button" data-view="discover">日志检索</button>
-          <button class="nav-button" data-view="errors">错误分组</button>
-          <button class="nav-button" data-view="users">用户管理</button>
-          <button class="nav-button" data-view="settings">配置管理</button>
-          <button class="nav-button" data-view="system">系统状态</button>
+          <button class="nav-button active" type="button" data-view="dashboard" title="Dashboard"><span class="nav-label">Dashboard</span></button>
+          <button class="nav-button" type="button" data-view="discover" title="日志检索"><span class="nav-label">日志检索</span></button>
+          <button class="nav-button" type="button" data-view="errors" title="错误分组"><span class="nav-label">错误分组</span></button>
+          <button class="nav-button" type="button" data-view="users" title="用户管理"><span class="nav-label">用户管理</span></button>
+          <button class="nav-button" type="button" data-view="settings" title="配置管理"><span class="nav-label">配置管理</span></button>
+          <button class="nav-button" type="button" data-view="system" title="系统状态"><span class="nav-label">系统状态</span></button>
         </nav>
         <div class="sidebar-footer">
           <div id="currentUser" class="muted"></div>
-          <button id="logoutButton" class="secondary full">退出登录</button>
+          <button id="logoutButton" class="secondary full" type="button" title="退出登录"><span class="logout-label">退出登录</span></button>
         </div>
       </aside>
 
@@ -131,7 +132,7 @@
             <input id="endTime" type="datetime-local" />
           </label>
           <label>
-            条数
+            查询上限
             <select id="limit">
               <option value="100">100 行</option>
               <option value="250">250 行</option>
@@ -192,6 +193,7 @@
             </table>
             <div id="eventsEmpty" class="empty">执行查询后加载日志。</div>
           </div>
+          <div id="eventsPagination" class="pagination hidden"></div>
         </section>
 
         <section id="errorsView" class="panel hidden">
@@ -215,6 +217,7 @@
             </table>
             <div id="errorsEmpty" class="empty">执行查询后加载错误分组。</div>
           </div>
+          <div id="errorsPagination" class="pagination hidden"></div>
         </section>
 
         <section id="dashboardError" class="error-banner hidden"></section>
@@ -322,6 +325,7 @@
               </table>
               <div id="customPanelsEmpty" class="empty">暂无自定义面板。</div>
             </div>
+            <div id="customPanelsPagination" class="pagination hidden"></div>
           </section>
         </section>
 
@@ -379,6 +383,7 @@
             </table>
             <div id="settingsEmpty" class="empty">暂无配置。</div>
           </div>
+          <div id="settingsPagination" class="pagination hidden"></div>
         </section>
 
         <section id="usersView" class="panel hidden">
@@ -431,6 +436,7 @@
             </table>
             <div id="usersEmpty" class="empty">暂无用户。</div>
           </div>
+          <div id="usersPagination" class="pagination hidden"></div>
         </section>
       </section>
     </main>
