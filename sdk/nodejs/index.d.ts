@@ -44,7 +44,7 @@ export interface BatchResponse {
   [key: string]: unknown;
 }
 
-export interface SudoworkLogClientOptions {
+export interface SudoLogClientOptions {
   baseUrl: string;
   apiKey: string;
   tenantId: string;
@@ -64,19 +64,19 @@ export interface RequestOptions {
   headers?: Record<string, string>;
 }
 
-export class SudoworkLogError extends Error {
+export class SudoLogError extends Error {
   status: number;
   response: Response | null;
   body: unknown;
   cause: unknown;
 }
 
-export class SudoworkLogClient {
-  constructor(options: SudoworkLogClientOptions);
+export class SudoLogClient {
+  constructor(options: SudoLogClientOptions);
   endpoint(): string;
   withDefaults(log: LogEvent): LogEvent;
   sendBatch(logs: LogEvent[], options?: RequestOptions): Promise<BatchResponse>;
   log(log: LogEvent, options?: RequestOptions): Promise<BatchResponse>;
 }
 
-export default SudoworkLogClient;
+export default SudoLogClient;

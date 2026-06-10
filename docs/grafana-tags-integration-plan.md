@@ -11,7 +11,7 @@
 - 查看某个 tag 条件下的最近日志。
 - 在 Grafana dashboard 中用变量选择 `tenant_id`、`product`、`tag_key`、`tag_value`。
 
-本方案目标不是把 Grafana 变成日志系统的唯一 UI，而是让 Grafana 承担 dashboard、监控和业务自助分析；日志详情、stack、原始事件排查仍然优先回到 Sudowork Log Console。
+本方案目标不是把 Grafana 变成日志系统的唯一 UI，而是让 Grafana 承担 dashboard、监控和业务自助分析；日志详情、stack、原始事件排查仍然优先回到 Sudo Log Console。
 
 ## 2. 总体方案
 
@@ -22,7 +22,7 @@
 ```text
 Business SDK / Service
   -> POST /v1/logs/batch with tags
-  -> Sudowork Log Gateway
+  -> Sudo Log Gateway
   -> Redis queue
   -> ClickHouse raw tables
        - sudo_logs
@@ -46,8 +46,8 @@ Business SDK / Service
 - Grafana 只读 ClickHouse。
 - Grafana 默认查询聚合表，不扫原始日志表。
 - 业务用户只面向稳定的 Grafana mart 表配置 panel。
-- 原始日志详情通过 `event_id` 跳转回 Sudowork Log Console。
-- Sudowork Log Console 内新增 Dashboard 菜单，嵌入 Grafana panel，但不向浏览器暴露 Grafana 数据源账号、API token 或管理接口。
+- 原始日志详情通过 `event_id` 跳转回 Sudo Log Console。
+- Sudo Log Console 内新增 Dashboard 菜单，嵌入 Grafana panel，但不向浏览器暴露 Grafana 数据源账号、API token 或管理接口。
 
 ## 3. 为什么需要 Grafana Mart
 
@@ -80,7 +80,7 @@ CREATE DATABASE IF NOT EXISTS sudo_log_grafana;
 用途：
 
 - Grafana Logs/Table panel 展示最近日志。
-- 提供 `event_id`，用于跳转回 Sudowork Log Console。
+- 提供 `event_id`，用于跳转回 Sudo Log Console。
 - 提供基础过滤字段和 `tags_json`。
 
 不建议暴露完整 `attributes_json`。如果必须暴露，应先确认脱敏策略和字段大小限制。
@@ -435,7 +435,7 @@ CREATE TABLE grafana_tag_registry (
 默认策略：
 
 - 新 tag 默认 searchable，但不默认进入 Grafana 聚合维度。
-- 业务需要在 Grafana 中自助使用某个 tag key 时，先在 Sudowork Log Console 注册并启用。
+- 业务需要在 Grafana 中自助使用某个 tag key 时，先在 Sudo Log Console 注册并启用。
 - 高基数 tag，例如 request_id、order_id、session_id，不允许 groupable。
 
 ## 6. ClickHouse 权限方案
@@ -528,7 +528,7 @@ grafana:
 apiVersion: 1
 
 datasources:
-  - name: Sudowork Log - sudo/sudocode
+  - name: Sudo Log - sudo/sudocode
     type: grafana-clickhouse-datasource
     access: proxy
     isDefault: true
@@ -738,7 +738,7 @@ ORDER BY log_time DESC
 LIMIT 200
 ```
 
-### 9.7 跳转到 Sudowork Log Console
+### 9.7 跳转到 Sudo Log Console
 
 Grafana table panel 为 `event_id` 配置 data link：
 
@@ -816,9 +816,9 @@ Panels：
 - Top versions
 - Top platforms
 - Recent error logs
-- Links to Sudowork Log Console
+- Links to Sudo Log Console
 
-## 11. Sudowork Log Console 嵌入方案
+## 11. Sudo Log Console 嵌入方案
 
 ### 11.1 前端菜单
 
@@ -920,8 +920,8 @@ Panel table
 
 - 前端不能自己拼接任意 Grafana URL。
 - 前端不能拿到 Grafana service account token。
-- iframe `src` 必须来自 Sudowork Log 后端 allowlist。
-- 所有 Grafana 请求通过 Sudowork Log 同源路径 `/grafana/*` 代理。
+- iframe `src` 必须来自 Sudo Log 后端 allowlist。
+- 所有 Grafana 请求通过 Sudo Log 同源路径 `/grafana/*` 代理。
 - 生产不使用公开 snapshot 或 public dashboard 作为默认方案。
 
 推荐采用 panel solo URL：
@@ -946,7 +946,7 @@ Panel table
 
 ```text
 Browser
-  -> Sudowork Log Console
+  -> Sudo Log Console
   -> /api/grafana/embed-config
   -> /grafana/* reverse proxy
   -> Grafana auth proxy
@@ -956,11 +956,11 @@ Browser
 
 认证边界：
 
-- 用户先登录 Sudowork Log Console。
-- Sudowork Log 后端验证 JWT/session。
+- 用户先登录 Sudo Log Console。
+- Sudo Log 后端验证 JWT/session。
 - `/api/grafana/embed-config` 根据当前用户权限返回允许嵌入的 panels。
 - `/grafana/*` 代理只接受已登录用户请求。
-- 代理向 Grafana 注入受信任的 auth proxy header，例如 `X-WEBAUTH-USER`。该 header 使用 `swlog_embed_<user-id>` 形式的专用嵌入用户名，不直接使用 Sudowork 用户名，避免 `admin` 等用户名映射到 Grafana 内置管理员。
+- 代理向 Grafana 注入受信任的 auth proxy header，例如 `X-WEBAUTH-USER`。该 header 使用 `swlog_embed_<user-id>` 形式的专用嵌入用户名，不直接使用 Sudo 用户名，避免 `admin` 等用户名映射到 Grafana 内置管理员。
 - 代理不向 Grafana 透传浏览器侧 Grafana cookie，也不把 Grafana `Set-Cookie` 透出给浏览器；Grafana 鉴权只依赖服务端注入的 auth proxy header。
 - Grafana 只把用户当 Viewer。
 - ClickHouse datasource 仍然使用 tenant/product 隔离的只读用户和 row policy。
@@ -982,7 +982,7 @@ auto_sign_up = true
 auto_assign_org_role = Viewer
 ```
 
-如果 Sudowork Log 和 Grafana 不是同站点部署，并且必须跨站点 iframe，应使用 HTTPS，并评估：
+如果 Sudo Log 和 Grafana 不是同站点部署，并且必须跨站点 iframe，应使用 HTTPS，并评估：
 
 ```ini
 [security]
@@ -1112,7 +1112,7 @@ Recent logs / event_id drilldown 可以作为自定义 panel，仅在 `GRAFANA_D
 - 新增代理：
   - `/grafana/* -> GRAFANA_INTERNAL_URL/*`
 - 代理职责：
-  - 校验 Sudowork Log 登录态。
+  - 校验 Sudo Log 登录态。
   - 注入 Grafana auth proxy header。
   - 去除客户端伪造的 auth proxy header。
   - 限制只代理 allowlist path，例如 `/d-solo/`、`/public/`、`/api/ds/query` 等 Grafana panel 必需路径。
@@ -1130,15 +1130,15 @@ Grafana provisioning：
 业务侧从接入到自助 dashboard 的流程：
 
 1. 业务服务通过 `POST /v1/logs/batch` 上报 tags。
-2. Sudowork Log 校验 tags，写入主日志表和 tags 倒排表。
+2. Sudo Log 校验 tags，写入主日志表和 tags 倒排表。
 3. Grafana mart 聚合表产生 1m/1d 数据。
-4. 业务负责人在 Sudowork Log Console 注册需要用于 Grafana 的 tag key。
+4. 业务负责人在 Sudo Log Console 注册需要用于 Grafana 的 tag key。
 5. 管理员或自动化任务启用 `grafana_enabled`、`groupable`、`variable_enabled`。
 6. 系统为该 tenant/product 准备 ClickHouse 只读用户和 Grafana datasource。
 7. 业务用户在 Dashboard 页面保存受控 QL panel。
 8. 后端通过 Grafana API 发布自定义 dashboard/panel。
-9. Sudowork Log Console 的 Dashboard 菜单通过 `/api/grafana/embed-config` 加载已发布 panels。
-10. 如需要查看单条日志详情，从 `event_id` data link 跳转回 Sudowork Log Console。
+9. Sudo Log Console 的 Dashboard 菜单通过 `/api/grafana/embed-config` 加载已发布 panels。
+10. 如需要查看单条日志详情，从 `event_id` data link 跳转回 Sudo Log Console。
 
 ## 13. 硬规则
 
@@ -1152,9 +1152,9 @@ Grafana provisioning：
 - 业务 datasource 只允许访问 `sudo_log_grafana`。
 - 内部跨租户 datasource 必须和业务 datasource 分离。
 - Grafana 用户不能共享 ClickHouse 管理员账号。
-- Sudowork Log Console 的 Dashboard 菜单只能展示当前用户有权访问的 tenant/product。
-- `/grafana/*` 代理必须复用 Sudowork Log 登录态鉴权。
-- Grafana auth proxy header 只能由 Sudowork Log 后端或受信任反向代理注入。
+- Sudo Log Console 的 Dashboard 菜单只能展示当前用户有权访问的 tenant/product。
+- `/grafana/*` 代理必须复用 Sudo Log 登录态鉴权。
+- Grafana auth proxy header 只能由 Sudo Log 后端或受信任反向代理注入。
 - 嵌入态 Grafana 用户必须使用专用 Viewer 身份，禁止复用 Grafana `admin` 或业务可编辑账号。
 - `/grafana/*` 代理不允许 annotation 写接口；tooltip 中的 `Add annotation` 这类编辑能力必须对嵌入用户不可见。
 
@@ -1273,10 +1273,10 @@ WHERE tenant_id = '${tenant_id}'
 - 提供 Tags Overview QL 模板。
 - 提供 Error Drilldown QL 模板。
 - 不再 provision 默认嵌入 panels。
-- 可选明细 panel 才配置 event_id data link 到 Sudowork Log Console。
+- 可选明细 panel 才配置 event_id data link 到 Sudo Log Console。
 - 提供常用 SQL snippets。
 
-### 阶段 4：Sudowork Log Console Dashboard 菜单
+### 阶段 4：Sudo Log Console Dashboard 菜单
 
 - 前端新增 `Dashboard` nav。
 - 前端新增 `dashboardView`。
@@ -1304,7 +1304,7 @@ WHERE tenant_id = '${tenant_id}'
 - 验证 row policy。
 - 验证 Grafana datasource 不能写入 ClickHouse。
 - 验证 data link 可以跳转到日志详情。
-- 验证 Sudowork Log Console Dashboard 菜单只展示有权限的 panels。
+- 验证 Sudo Log Console Dashboard 菜单只展示有权限的 panels。
 - 验证浏览器中不存在 Grafana token、ClickHouse 密码或 datasource 凭据。
 
 ## 17. 验收标准
@@ -1312,7 +1312,7 @@ WHERE tenant_id = '${tenant_id}'
 第二步完成后，应满足：
 
 - 业务日志带 tags push 后，Grafana 5 分钟内可见聚合数据。
-- Sudowork Log Console 左侧出现 Dashboard 菜单。
+- Sudo Log Console 左侧出现 Dashboard 菜单。
 - Dashboard 页面未发布自定义 panel 时不展示默认 panels。
 - Dashboard 页面切换 tenant/product/time range/tag 后，已发布 panels 按选择刷新。
 - `admin`/`operator` 可以在 Dashboard 页面保存自定义 QL panel，后端自动发布为 Grafana solo panel 并嵌入当前页面。
@@ -1323,7 +1323,7 @@ WHERE tenant_id = '${tenant_id}'
 - 业务 datasource 无法访问 raw tables。
 - 业务 datasource 无法跨 tenant/product 查询。
 - 高基数 tag 不会默认出现在 group by panel 中。
-- dashboard 能通过 `event_id` 跳转回 Sudowork Log Console。
+- dashboard 能通过 `event_id` 跳转回 Sudo Log Console。
 - 前端源码、localStorage、iframe URL 中不包含 Grafana token 或 ClickHouse 凭据。
 
 ## 18. 当前代码落地范围
@@ -1334,9 +1334,9 @@ WHERE tenant_id = '${tenant_id}'
 - 日志 flush 写入 raw tables 后，默认只同步写入 Grafana 1m 聚合表和 1d tag 变量表；`grafana_log_events`/`grafana_tag_events` 仅在 `GRAFANA_DETAIL_EVENTS_ENABLED=true` 时短 TTL 写入。
 - ClickHouse 自动创建 `grafana_reader` 只读用户，只授予 Grafana mart database 的 `SELECT` 权限，不授予 raw database 权限。
 - Docker Compose 增加 Grafana 服务，安装 `grafana-clickhouse-datasource` 插件，启用 `allow_embedding` 和 auth proxy。
-- 增加 Grafana datasource provisioning；不再 provision 默认 `Sudowork Tags Overview` dashboard，也不再返回固定内置 panels。
+- 增加 Grafana datasource provisioning；不再 provision 默认 `Sudo Tags Overview` dashboard，也不再返回固定内置 panels。
 - 后端增加 `/api/grafana/embed-config`，只为已登录且具备 `logs:read` 的用户返回 allowlist panel URL。
-- 后端增加 `/grafana/*` 同源反向代理，复用 Sudowork Log 登录态签发的 HttpOnly embed cookie，过滤 Grafana admin API 和 annotation 写接口，并只注入服务端可信 auth proxy header；本地 dev server 和后端都支持 `/grafana/api/live/ws` WebSocket Upgrade 代理。
+- 后端增加 `/grafana/*` 同源反向代理，复用 Sudo Log 登录态签发的 HttpOnly embed cookie，过滤 Grafana admin API 和 annotation 写接口，并只注入服务端可信 auth proxy header；本地 dev server 和后端都支持 `/grafana/api/live/ws` WebSocket Upgrade 代理。
 - Console 增加 Dashboard 菜单和视图，支持 tenant/product/time range/environment/tag_key/tag_value 控制、iframe 刷新和 disabled/empty/error 状态。
 - 存储默认策略：`GRAFANA_DETAIL_EVENTS_ENABLED=false`、`GRAFANA_DETAIL_TTL_DAYS=7`、`GRAFANA_METRICS_TTL_DAYS=30`。
 - 当前没有生产数据，ClickHouse 表结构不做在线升级，启动时只执行最新 `CREATE TABLE IF NOT EXISTS` 建表语句；本地旧结构 dev 数据库需要手动删除后重建。

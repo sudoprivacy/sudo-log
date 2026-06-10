@@ -51,7 +51,7 @@ class BatchResponse(TypedDict, total=False):
 
 
 @dataclass
-class SudoworkLogError(Exception):
+class SudoLogError(Exception):
     message: str
     status: int = 0
     body: Any = None
@@ -77,7 +77,7 @@ def _is_retryable_status(status: int) -> bool:
     return 500 <= status <= 599
 
 
-class SudoworkLogClient:
+class SudoLogClient:
     def __init__(
         self,
         *,
@@ -104,24 +104,24 @@ class SudoworkLogClient:
         self.default_attributes = _merge_mapping(default_attributes)
 
         if not self.base_url:
-            raise SudoworkLogError("base_url is required")
+            raise SudoLogError("base_url is required")
         if not self.api_key:
-            raise SudoworkLogError("api_key is required")
+            raise SudoLogError("api_key is required")
         if not self.tenant_id:
-            raise SudoworkLogError("tenant_id is required")
+            raise SudoLogError("tenant_id is required")
         if not self.product:
-            raise SudoworkLogError("product is required")
+            raise SudoLogError("product is required")
 
     def endpoint(self) -> str:
         return f"{self.base_url}/v1/logs/batch"
 
     def with_defaults(self, log: Mapping[str, Any]) -> dict[str, Any]:
         if not isinstance(log, Mapping):
-            raise SudoworkLogError("log must be a mapping")
+            raise SudoLogError("log must be a mapping")
         if log.get("tenant_id") and log.get("tenant_id") != self.tenant_id:
-            raise SudoworkLogError(f"log tenant_id does not match client tenant_id: {log.get('tenant_id')}")
+            raise SudoLogError(f"log tenant_id does not match client tenant_id: {log.get('tenant_id')}")
         if log.get("product") and log.get("product") != self.product:
-            raise SudoworkLogError(f"log product does not match client product: {log.get('product')}")
+            raise SudoLogError(f"log product does not match client product: {log.get('product')}")
 
         result: dict[str, Any] = dict(log)
         result["tenant_id"] = self.tenant_id
@@ -133,11 +133,11 @@ class SudoworkLogClient:
 
     def send_batch(self, logs: Sequence[Mapping[str, Any]], *, timeout: float | None = None, max_retries: int | None = None) -> BatchResponse:
         if not isinstance(logs, Sequence) or isinstance(logs, (str, bytes, bytearray)):
-            raise SudoworkLogError("logs must be a sequence")
+            raise SudoLogError("logs must be a sequence")
         if len(logs) == 0:
-            raise SudoworkLogError("logs must not be empty")
+            raise SudoLogError("logs must not be empty")
         if len(logs) > MAX_BATCH_SIZE:
-            raise SudoworkLogError(f"logs must contain no more than {MAX_BATCH_SIZE} entries")
+            raise SudoLogError(f"logs must contain no more than {MAX_BATCH_SIZE} entries")
 
         payload = json.dumps({"logs": [self.with_defaults(log) for log in logs]}, ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(
@@ -152,7 +152,7 @@ class SudoworkLogClient:
 
         attempts = self.max_retries if max_retries is None else max_retries
         request_timeout = self.timeout if timeout is None else timeout
-        last_error: SudoworkLogError | None = None
+        last_error: SudoLogError | None = None
 
         for attempt in range(attempts + 1):
             try:
@@ -160,7 +160,7 @@ class SudoworkLogClient:
                     body = response.read().decode("utf-8")
                     data: MutableMapping[str, Any] = json.loads(body) if body else {}
                     if data.get("success") is False:
-                        raise SudoworkLogError(str(data.get("error") or "Sudowork Log request failed"), response.status, data)
+                        raise SudoLogError(str(data.get("error") or "Sudo Log request failed"), response.status, data)
                     return data  # type: ignore[return-value]
             except urllib.error.HTTPError as exc:
                 body_text = exc.read().decode("utf-8", errors="replace")
@@ -168,21 +168,21 @@ class SudoworkLogClient:
                     body = json.loads(body_text) if body_text else {}
                 except json.JSONDecodeError:
                     body = {"raw": body_text}
-                error = SudoworkLogError(str(body.get("error") or f"Sudowork Log request failed with {exc.code}"), exc.code, body)
+                error = SudoLogError(str(body.get("error") or f"Sudo Log request failed with {exc.code}"), exc.code, body)
                 if _is_retryable_status(exc.code) and attempt < attempts:
                     last_error = error
                     time.sleep(0.2 * (2**attempt))
                     continue
                 raise error from exc
             except urllib.error.URLError as exc:
-                error = SudoworkLogError("Sudowork Log request failed", body={"reason": str(exc.reason)})
+                error = SudoLogError("Sudo Log request failed", body={"reason": str(exc.reason)})
                 if attempt < attempts:
                     last_error = error
                     time.sleep(0.2 * (2**attempt))
                     continue
                 raise error from exc
 
-        raise last_error or SudoworkLogError("Sudowork Log request failed")
+        raise last_error or SudoLogError("Sudo Log request failed")
 
     def log(self, log: Mapping[str, Any], *, timeout: float | None = None, max_retries: int | None = None) -> BatchResponse:
         return self.send_batch([log], timeout=timeout, max_retries=max_retries)

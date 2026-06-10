@@ -1,8 +1,8 @@
-# Sudowork Log 实施方案
+# Sudo Log 实施方案
 
 ## 1. 背景
 
-Sudowork 产品体系需要一套统一日志系统。当前优先级是先把 `sudo-log` 建成独立、专业、可自服务排障的日志系统，再接入 Sudowork、SudoRouter、SudoCode、内部服务与第三方系统。
+Sudowork 产品体系需要一套统一日志系统。当前优先级是先把 `sudo-log` 建成独立、专业、可自服务排障的日志系统，再接入 Sudo、SudoRouter、SudoCode、内部服务与第三方系统。
 
 当前目标不是复制完整 ELK/CLS，而是先做一套可控、低复杂度、可演进的日志底座：
 
@@ -21,7 +21,7 @@ Sudowork 产品体系需要一套统一日志系统。当前优先级是先把 `
 Sudowork / SudoRouter / SudoCode / Third-party SDK
         |
         v
-Sudowork Log Gateway
+Sudo Log Gateway
 - 鉴权
 - 租户与产品线映射
 - schema 校验
@@ -29,7 +29,7 @@ Sudowork Log Gateway
 - 限流
 - error 归一化
         |
-        +--> Sudowork Log Console
+        +--> Sudo Log Console
         |    - Discover 查询
         |    - Timeline 概览
         |    - Error groups
@@ -69,17 +69,17 @@ Object Storage / Blob Storage
 v1 的实际部署先采用：
 
 ```text
-Client / curl / future SDK -> Sudowork Log Gateway -> Redis queue -> ClickHouse
+Client / curl / future SDK -> Sudo Log Gateway -> Redis queue -> ClickHouse
                            -> PostgreSQL config
                            -> local blob volume
                            -> built-in console
 ```
 
-这样先把日志系统本身闭环：能写入、能查询、能聚合、能在控制台排查。Sudowork 和其他系统后续只需要作为日志生产方接入。
+这样先把日志系统本身闭环：能写入、能查询、能聚合、能在控制台排查。Sudo 和其他系统后续只需要作为日志生产方接入。
 
 ## 3. 为什么选择 ClickHouse
 
-Sudowork Log 的核心查询是：
+Sudo Log 的核心查询是：
 
 - 某个用户某时间段的 error 日志
 - 某版本/平台/组件的错误趋势
@@ -289,7 +289,7 @@ Redis 负责 session registry 和日志队列。PostgreSQL 负责用户、租户
 
 ## 7. 控制台设计
 
-`/console` 是 sudo-log 自带的专业日志系统页面，不依赖 Sudowork 或其他产品项目。
+`/console` 是 sudo-log 自带的专业日志系统页面，不依赖 Sudo 或其他产品项目。
 
 第一期控制台能力：
 
@@ -311,7 +311,7 @@ Redis 负责 session registry 和日志队列。PostgreSQL 负责用户、租户
 
 ## 8. Sudowork 客户端接入
 
-Sudowork 接入应发生在 sudo-log 自身日志系统能力稳定之后。Sudowork 只作为日志生产方和部分诊断入口，不承担 sudo-log 控制台职责。
+Sudowork 接入应发生在 sudo-log 自身日志系统能力稳定之后。Sudo 只作为日志生产方和部分诊断入口，不承担 sudo-log 控制台职责。
 
 ### 主进程
 

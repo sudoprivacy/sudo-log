@@ -40,7 +40,7 @@ function panelOptions(panelType: GrafanaPanelType): object {
 }
 
 export class GrafanaDashboardPublisher {
-  public constructor(private readonly config: AppConfig) {}
+  public constructor(private readonly config: AppConfig) { }
 
   public async publish(panel: GrafanaCustomPanelRecord): Promise<boolean> {
     if (!this.config.grafana.enabled || !this.config.grafana.publishEnabled) return false;
@@ -132,7 +132,7 @@ export class GrafanaDashboardPublisher {
       },
       time: { from: 'now-6h', to: 'now' },
       timezone: 'browser',
-      title: `Sudowork Custom - ${panel.tenantId}/${panel.product} - ${panel.title}`,
+      title: `Sudo Custom - ${panel.tenantId}/${panel.product} - ${panel.title}`,
       uid: panel.dashboardUid,
       version: 1,
     };

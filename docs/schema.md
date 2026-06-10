@@ -1,6 +1,6 @@
 # Schema
 
-Sudowork Log uses PostgreSQL for configuration and users, Redis for sessions/queue, and ClickHouse only for log events.
+Sudo Log uses PostgreSQL for configuration and users, Redis for sessions/queue, and ClickHouse only for log events.
 
 ## PostgreSQL Tables
 

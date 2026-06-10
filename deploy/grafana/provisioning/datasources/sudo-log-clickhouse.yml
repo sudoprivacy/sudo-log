@@ -1,7 +1,12 @@
 apiVersion: 1
 
+deleteDatasources:
+  - name: Sudo Log ClickHouse
+    orgId: 1
+
 datasources:
-  - name: Sudowork Log ClickHouse
+  - name: Sudo Log ClickHouse
+    orgId: 1
     uid: sudo-log-clickhouse
     type: grafana-clickhouse-datasource
     access: proxy

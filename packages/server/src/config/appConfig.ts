@@ -94,7 +94,7 @@ export function loadConfig(): AppConfig {
     port: readInt('SUDO_LOG_PORT', 8080),
     adminStaticDir: readString('SUDO_LOG_ADMIN_STATIC_DIR', './packages/admin/src'),
     apiKeyHeader: readString('API_KEY_HEADER', 'X-API-Key'),
-    defaultApiKey: readString('DEFAULT_API_KEY', 'sk-8f3a2b1c9d5e7f6a4b3c2d1e8f9a0b7c'),
+    defaultApiKey: readString('DEFAULT_API_KEY', 'key_exp'),
     queue: {
       name: readString('SUDO_LOG_QUEUE_NAME', 'logs'),
       batchSize: readInt('SUDO_LOG_QUEUE_BATCH_SIZE', 200),

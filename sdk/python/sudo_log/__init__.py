@@ -1,8 +1,8 @@
-from .client import BatchResponse, LogEvent, SudoworkLogClient, SudoworkLogError
+from .client import BatchResponse, LogEvent, SudoLogClient, SudoLogError
 
 __all__ = [
     "BatchResponse",
     "LogEvent",
-    "SudoworkLogClient",
-    "SudoworkLogError",
+    "SudoLogClient",
+    "SudoLogError",
 ]

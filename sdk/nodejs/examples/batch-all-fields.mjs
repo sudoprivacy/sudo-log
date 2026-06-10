@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { SudoworkLogClient } from '../index.js';
+import { SudoLogClient } from '../index.js';
 
 function requiredEnv(name) {
   const value = process.env[name];
@@ -15,7 +15,7 @@ const tenantId = requiredEnv('SUDO_LOG_TENANT_ID');
 const product = requiredEnv('SUDO_LOG_PRODUCT');
 const environment = process.env.SUDO_LOG_ENVIRONMENT || 'production';
 
-const client = new SudoworkLogClient({
+const client = new SudoLogClient({
   baseUrl: requiredEnv('SUDO_LOG_BASE_URL'),
   apiKey: requiredEnv('SUDO_LOG_API_KEY'),
   tenantId,

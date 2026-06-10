@@ -1,9 +1,9 @@
 apiVersion: 1
 
 providers:
-  - name: Sudowork Log
+  - name: Sudo Log
     orgId: 1
-    folder: Sudowork Log
+    folder: Sudo Log
     type: file
     disableDeletion: false
     editable: false

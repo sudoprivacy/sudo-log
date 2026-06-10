@@ -1,8 +1,8 @@
-# Sudowork Log
+# Sudo Log
 
-Sudowork Log is a standalone ClickHouse-backed log system for Sudowork products and future third-party integrations.
+Sudo Log is a standalone ClickHouse-backed log system for Sudowork products and future third-party integrations.
 
-The first implementation focuses on making Sudowork Log useful as its own professional log console before product-specific integrations:
+The first implementation focuses on making Sudo Log useful as its own professional log console before product-specific integrations:
 
 - Structured log ingestion through `POST /v1/logs/batch`
 - Error stack extraction and blob storage
@@ -104,7 +104,7 @@ Start the service locally:
 ```bash
 SUDO_LOG_PORT=8080 \
 API_KEY_HEADER=X-API-Key \
-DEFAULT_API_KEY=sk-8f3a2b1c9d5e7f6a4b3c2d1e8f9a0b7c \
+DEFAULT_API_KEY=key_exp \
 CLICKHOUSE_URL=http://127.0.0.1:8123 \
 CLICKHOUSE_DATABASE=sudo_log \
 CLICKHOUSE_USER=sudo \
@@ -147,7 +147,7 @@ Terminal 1, start dependencies and the service:
 docker compose up -d clickhouse redis postgres
 SUDO_LOG_PORT=8080 \
 API_KEY_HEADER=X-API-Key \
-DEFAULT_API_KEY=sk-8f3a2b1c9d5e7f6a4b3c2d1e8f9a0b7c \
+DEFAULT_API_KEY=key_exp \
 CLICKHOUSE_URL=http://127.0.0.1:8123 \
 CLICKHOUSE_DATABASE=sudo_log \
 CLICKHOUSE_USER=sudo \
@@ -210,7 +210,7 @@ ACCESS_TOKEN=$(
 
 ```bash
 curl -s "$BASE_URL/v1/logs/batch" \
-  -H 'X-API-Key: sk-8f3a2b1c9d5e7f6a4b3c2d1e8f9a0b7c' \
+  -H 'X-API-Key: key_exp' \
   -H 'content-type: application/json' \
   -d '{
     "logs": [

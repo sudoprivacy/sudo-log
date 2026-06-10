@@ -1,6 +1,6 @@
-# Sudowork Log 第三方写入接入说明
+# Sudo Log 第三方写入接入说明
 
-本文只面向第三方应用写入日志。Sudowork Log 日志上报接口：
+本文只面向第三方应用写入日志。Sudo Log 日志上报接口：
 
 ```http
 POST /v1/logs/batch
@@ -8,13 +8,13 @@ POST /v1/logs/batch
 
 ## 1. 接入前置
 
-业务方接入前需要先向 Sudowork Log 管理员申请接入配置：
+业务方接入前需要先向 Sudo Log 管理员申请接入配置：
 
 1. 申请租户 ID，例如 `sudo`。
 2. 申请该租户下的产品 ID，例如 `sudowork`。
 3. 获取该租户的 API Key。
 
-管理员会在 Sudowork Log 控制台维护租户、产品和 API Key。API Key 在租户创建时生成或指定，创建后只能复制使用，不能在控制台修改。默认初始化配置为：
+管理员会在 Sudo Log 控制台维护租户、产品和 API Key。API Key 在租户创建时生成或指定，创建后只能复制使用，不能在控制台修改。默认初始化配置为：
 
 | 配置 | 默认值 |
 | --- | --- |
@@ -39,7 +39,7 @@ API key 是服务端机密。后端服务、CLI、桌面应用主进程可以持
 
 ## 2. 接入方式选择
 
-Sudowork Log 支持两种接入方式：
+Sudo Log 支持两种接入方式：
 
 | 方式 | 适用场景 | 说明 |
 | --- | --- | --- |
@@ -329,11 +329,11 @@ Tags 是日志系统里的高价值检索和聚合维度，不是普通上下文
 
 ## 6. 用户标识与设备哈希
 
-Sudowork Log 存储的是 `user_identifier_hash`、`user_id_hash` 和 `device_id_hash`，不保存原始用户标识、用户 ID 或设备 ID。
+Sudo Log 存储的是 `user_identifier_hash`、`user_id_hash` 和 `device_id_hash`，不保存原始用户标识、用户 ID 或设备 ID。
 
-`user_identifier` 是每条日志必填的用户定位字段。它应该是业务侧最容易拿到、能全局唯一定位用户的字符串，例如手机号、邮箱、统一用户中心 ID 或账号名。控制台搜索时输入同一个明文 `user_identifier`，后端会按统一算法 hash 后查询。Sudowork Log 不落库保存明文 `user_identifier`，但传输链路仍应使用 HTTPS，并把 API Key 仅放在服务端。
+`user_identifier` 是每条日志必填的用户定位字段。它应该是业务侧最容易拿到、能全局唯一定位用户的字符串，例如手机号、邮箱、统一用户中心 ID 或账号名。控制台搜索时输入同一个明文 `user_identifier`，后端会按统一算法 hash 后查询。Sudo Log 不落库保存明文 `user_identifier`，但传输链路仍应使用 HTTPS，并把 API Key 仅放在服务端。
 
-推荐直接上报明文 `user_identifier` / `user_id` / `device_id`，由 Sudowork Log 服务端按统一算法 hash 后入库。
+推荐直接上报明文 `user_identifier` / `user_id` / `device_id`，由 Sudo Log 服务端按统一算法 hash 后入库。
 
 哈希算法必须和服务端保持一致：
 
@@ -373,11 +373,11 @@ const device_id_hash = sudoLogHash("device-abc");
 
 第三方只需要上报 `timestamp`，表示日志事件真实发生时间。
 
-Sudowork Log 会自动补充：
+Sudo Log 会自动补充：
 
 | 字段 | 来源 | 说明 |
 | --- | --- | --- |
-| `received_at` | Sudowork Log Gateway | 网关接收并写入 Redis 队列的时间 |
+| `received_at` | Sudo Log Gateway | 网关接收并写入 Redis 队列的时间 |
 | `created_at` | ClickHouse | 后台 worker 写入 ClickHouse 的时间 |
 
 如果 `timestamp` 缺失或无效，网关会使用当前时间兜底。排障时间线优先看 `timestamp`；排查上报延迟或队列堆积时看 `received_at` 和 `created_at`。
@@ -396,7 +396,7 @@ Sudowork Log 会自动补充：
 
 推荐上传：
 
-- 明文 `user_identifier`、`user_id`、`device_id`，由 Sudowork Log 服务端统一 hash；或按本文算法生成的 `user_identifier_hash`、`user_id_hash`、`device_id_hash`
+- 明文 `user_identifier`、`user_id`、`device_id`，由 Sudo Log 服务端统一 hash；或按本文算法生成的 `user_identifier_hash`、`user_id_hash`、`device_id_hash`
 - `session_id`、`trace_id`、`request_id`
 - 脱敏后的错误名、错误消息和 stack
 - 版本、平台、组件、状态码等小字段

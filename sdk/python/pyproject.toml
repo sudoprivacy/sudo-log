@@ -1,7 +1,7 @@
 [project]
 name = "sudo-log-sdk"
 version = "0.1.0"
-description = "Sudowork Log batch ingest SDK for Python."
+description = "Sudo Log batch ingest SDK for Python."
 requires-python = ">=3.9"
 
 [build-system]

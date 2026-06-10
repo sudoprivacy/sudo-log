@@ -21,10 +21,10 @@ function mergeObject(left, right) {
   };
 }
 
-export class SudoworkLogError extends Error {
+export class SudoLogError extends Error {
   constructor(message, options = {}) {
     super(message);
-    this.name = 'SudoworkLogError';
+    this.name = 'SudoLogError';
     this.status = options.status || 0;
     this.response = options.response || null;
     this.body = options.body || null;
@@ -32,7 +32,7 @@ export class SudoworkLogError extends Error {
   }
 }
 
-export class SudoworkLogClient {
+export class SudoLogClient {
   constructor(options = {}) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl);
     this.apiKey = options.apiKey || '';
@@ -46,12 +46,12 @@ export class SudoworkLogClient {
     this.defaultAttributes = mergeObject(options.defaultAttributes);
     this.fetchImpl = options.fetchImpl || globalThis.fetch;
 
-    if (!this.baseUrl) throw new SudoworkLogError('baseUrl is required');
-    if (!this.apiKey) throw new SudoworkLogError('apiKey is required');
-    if (!this.tenantId) throw new SudoworkLogError('tenantId is required');
-    if (!this.product) throw new SudoworkLogError('product is required');
+    if (!this.baseUrl) throw new SudoLogError('baseUrl is required');
+    if (!this.apiKey) throw new SudoLogError('apiKey is required');
+    if (!this.tenantId) throw new SudoLogError('tenantId is required');
+    if (!this.product) throw new SudoLogError('product is required');
     if (typeof this.fetchImpl !== 'function') {
-      throw new SudoworkLogError('fetch is not available; use Node.js 18+ or pass fetchImpl');
+      throw new SudoLogError('fetch is not available; use Node.js 18+ or pass fetchImpl');
     }
   }
 
@@ -61,13 +61,13 @@ export class SudoworkLogClient {
 
   withDefaults(log) {
     if (!log || typeof log !== 'object' || Array.isArray(log)) {
-      throw new SudoworkLogError('log must be an object');
+      throw new SudoLogError('log must be an object');
     }
     if (log.tenant_id && log.tenant_id !== this.tenantId) {
-      throw new SudoworkLogError(`log tenant_id does not match client tenantId: ${log.tenant_id}`);
+      throw new SudoLogError(`log tenant_id does not match client tenantId: ${log.tenant_id}`);
     }
     if (log.product && log.product !== this.product) {
-      throw new SudoworkLogError(`log product does not match client product: ${log.product}`);
+      throw new SudoLogError(`log product does not match client product: ${log.product}`);
     }
 
     return {
@@ -81,10 +81,10 @@ export class SudoworkLogClient {
   }
 
   async sendBatch(logs, options = {}) {
-    if (!Array.isArray(logs)) throw new SudoworkLogError('logs must be an array');
-    if (logs.length === 0) throw new SudoworkLogError('logs must not be empty');
+    if (!Array.isArray(logs)) throw new SudoLogError('logs must be an array');
+    if (logs.length === 0) throw new SudoLogError('logs must not be empty');
     if (logs.length > MAX_BATCH_SIZE) {
-      throw new SudoworkLogError(`logs must contain no more than ${MAX_BATCH_SIZE} entries`);
+      throw new SudoLogError(`logs must contain no more than ${MAX_BATCH_SIZE} entries`);
     }
 
     const body = JSON.stringify({ logs: logs.map((log) => this.withDefaults(log)) });
@@ -116,7 +116,7 @@ export class SudoworkLogClient {
         }
         if (response.ok && data.success !== false) return data;
 
-        const error = new SudoworkLogError(data.error || `Sudowork Log request failed with ${response.status}`, {
+        const error = new SudoLogError(data.error || `Sudo Log request failed with ${response.status}`, {
           status: response.status,
           response,
           body: data,
@@ -129,12 +129,12 @@ export class SudoworkLogClient {
         throw error;
       } catch (error) {
         const normalized =
-          error instanceof SudoworkLogError
+          error instanceof SudoLogError
             ? error
-            : new SudoworkLogError(error?.name === 'AbortError' ? 'Sudowork Log request timed out' : 'Sudowork Log request failed', {
-                cause: error,
-              });
-        if (!(error instanceof SudoworkLogError) && attempt < maxRetries) {
+            : new SudoLogError(error?.name === 'AbortError' ? 'Sudo Log request timed out' : 'Sudo Log request failed', {
+              cause: error,
+            });
+        if (!(error instanceof SudoLogError) && attempt < maxRetries) {
           lastError = normalized;
           await sleep(200 * 2 ** attempt);
           continue;
@@ -144,7 +144,7 @@ export class SudoworkLogClient {
         clearTimeout(timer);
       }
     }
-    throw lastError || new SudoworkLogError('Sudowork Log request failed');
+    throw lastError || new SudoLogError('Sudo Log request failed');
   }
 
   async log(log, options = {}) {
@@ -152,4 +152,4 @@ export class SudoworkLogClient {
   }
 }
 
-export default SudoworkLogClient;
+export default SudoLogClient;

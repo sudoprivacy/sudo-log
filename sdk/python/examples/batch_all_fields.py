@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 
-from sudo_log import SudoworkLogClient
+from sudo_log import SudoLogClient
 
 
 def required_env(name):
@@ -25,7 +25,7 @@ TENANT_ID = required_env("SUDO_LOG_TENANT_ID")
 PRODUCT = required_env("SUDO_LOG_PRODUCT")
 ENVIRONMENT = os.getenv("SUDO_LOG_ENVIRONMENT", "production")
 
-client = SudoworkLogClient(
+client = SudoLogClient(
     base_url=required_env("SUDO_LOG_BASE_URL"),
     api_key=required_env("SUDO_LOG_API_KEY"),
     tenant_id=TENANT_ID,

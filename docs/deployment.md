@@ -10,11 +10,11 @@ Services:
 
 | Service | URL |
 | --- | --- |
-| Sudowork Log | `http://127.0.0.1:8088` |
+| Sudo Log | `http://127.0.0.1:8088` |
 | Console | `http://127.0.0.1:8088/console` |
 | Embedded Grafana | `http://127.0.0.1:8088/grafana` |
 
-Only the Sudowork Log service port is published to the host by default. Grafana is reached through the Sudowork Log `/grafana/*` proxy; ClickHouse, Redis, PostgreSQL, and Grafana are otherwise available only on the internal Compose network.
+Only the Sudo Log service port is published to the host by default. Grafana is reached through the Sudo Log `/grafana/*` proxy; ClickHouse, Redis, PostgreSQL, and Grafana are otherwise available only on the internal Compose network.
 
 The default local console login is:
 
@@ -86,7 +86,7 @@ Use the same service shape, but change:
 - Grafana admin password, root URL, and auth proxy trusted network
 - ClickHouse `grafana_reader` password or per-tenant Grafana datasource users
 - Grafana ClickHouse users must use `readonly=2` plus `GRANT SELECT` only; `readonly=1` blocks datasource query settings such as `max_execution_time`
-- Embedded Grafana sessions must use the Sudowork Log proxy-generated Viewer identity, not Grafana `admin`, and annotation writes stay blocked
+- Embedded Grafana sessions must use the Sudo Log proxy-generated Viewer identity, not Grafana `admin`, and annotation writes stay blocked
 - Longer retention based on topic
 - Console access policy at the reverse proxy layer
 
@@ -134,7 +134,7 @@ docker compose -f docker-compose.yml -f deploy/docker-compose.redpanda.yml up --
 The intended v2 flow:
 
 ```text
-Sudowork Log -> Redpanda topic -> ClickHouse consumer
+Sudo Log -> Redpanda topic -> ClickHouse consumer
                          -> Quickwit/OpenSearch consumer
                          -> Alert consumer
 ```
