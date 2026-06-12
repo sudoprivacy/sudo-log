@@ -57,6 +57,11 @@ export interface GrafanaCustomPanelRecord {
   id: string;
   tenantId: string;
   product: string;
+  from: string;
+  to: string;
+  environment: string;
+  tagKey: string;
+  tagValue: string;
   title: string;
   description: string;
   panelType: GrafanaPanelType;
@@ -76,6 +81,11 @@ export interface GrafanaCustomPanelRecord {
 export interface CreateGrafanaCustomPanelInput {
   tenantId: string;
   product: string;
+  from?: string;
+  to?: string;
+  environment?: string;
+  tagKey?: string;
+  tagValue?: string;
   title: string;
   description?: string;
   panelType?: GrafanaPanelType;
@@ -86,6 +96,13 @@ export interface CreateGrafanaCustomPanelInput {
 }
 
 export interface UpdateGrafanaCustomPanelInput {
+  tenantId?: string;
+  product?: string;
+  from?: string;
+  to?: string;
+  environment?: string;
+  tagKey?: string;
+  tagValue?: string;
   title?: string;
   description?: string;
   panelType?: GrafanaPanelType;

@@ -21,6 +21,11 @@ function toPanel(row: PgRow): GrafanaCustomPanelRecord {
     id: row.id || '',
     tenantId: row.tenant_id || '',
     product: row.product || '',
+    from: row.filter_from || 'now-6h',
+    to: row.filter_to || 'now',
+    environment: row.environment || 'production',
+    tagKey: row.tag_key || '',
+    tagValue: row.tag_value || '',
     title: row.title || '',
     description: row.description || '',
     panelType: panelType(row.panel_type),
@@ -50,6 +55,10 @@ function normalizeDescription(value: string | undefined): string {
   return value?.trim() || '';
 }
 
+function normalizeOptionalText(value: string | undefined, fallback: string): string {
+  return value?.trim() || fallback;
+}
+
 function normalizeHeight(value: number | undefined): number {
   if (!Number.isFinite(value)) return 320;
   return Math.max(220, Math.min(Math.round(value || 320), 640));
@@ -73,6 +82,11 @@ export class GrafanaPanelStore {
         id TEXT PRIMARY KEY,
         tenant_id TEXT NOT NULL,
         product TEXT NOT NULL,
+        filter_from TEXT NOT NULL DEFAULT 'now-6h',
+        filter_to TEXT NOT NULL DEFAULT 'now',
+        environment TEXT NOT NULL DEFAULT 'production',
+        tag_key TEXT NOT NULL DEFAULT '',
+        tag_value TEXT NOT NULL DEFAULT '',
         title TEXT NOT NULL,
         description TEXT NOT NULL,
         panel_type TEXT NOT NULL,
@@ -89,6 +103,11 @@ export class GrafanaPanelStore {
         publish_error TEXT NOT NULL DEFAULT ''
       )
     `);
+    await this.postgres.query("ALTER TABLE grafana_custom_panels ADD COLUMN IF NOT EXISTS filter_from TEXT NOT NULL DEFAULT 'now-6h'");
+    await this.postgres.query("ALTER TABLE grafana_custom_panels ADD COLUMN IF NOT EXISTS filter_to TEXT NOT NULL DEFAULT 'now'");
+    await this.postgres.query("ALTER TABLE grafana_custom_panels ADD COLUMN IF NOT EXISTS environment TEXT NOT NULL DEFAULT 'production'");
+    await this.postgres.query("ALTER TABLE grafana_custom_panels ADD COLUMN IF NOT EXISTS tag_key TEXT NOT NULL DEFAULT ''");
+    await this.postgres.query("ALTER TABLE grafana_custom_panels ADD COLUMN IF NOT EXISTS tag_value TEXT NOT NULL DEFAULT ''");
   }
 
   public async list(tenantId: string, product: string, enabledOnly = false): Promise<GrafanaCustomPanelRecord[]> {
@@ -99,7 +118,7 @@ export class GrafanaPanelStore {
       WHERE tenant_id = ${pgString(normalizeIdentifier(tenantId))}
         AND product = ${pgString(normalizeIdentifier(product))}
         ${enabledWhere}
-      ORDER BY title ASC, created_at ASC
+      ORDER BY updated_at DESC, created_at DESC
     `);
     return rows.map(toPanel);
   }
@@ -122,6 +141,11 @@ export class GrafanaPanelStore {
       id,
       tenantId,
       product,
+      from: normalizeOptionalText(input.from, 'now-6h'),
+      to: normalizeOptionalText(input.to, 'now'),
+      environment: normalizeOptionalText(input.environment, 'production'),
+      tagKey: normalizeOptionalText(input.tagKey, ''),
+      tagValue: normalizeOptionalText(input.tagValue, ''),
       title,
       description: normalizeDescription(input.description),
       panelType: input.panelType || 'timeseries',
@@ -142,6 +166,11 @@ export class GrafanaPanelStore {
         id,
         tenant_id,
         product,
+        filter_from,
+        filter_to,
+        environment,
+        tag_key,
+        tag_value,
         title,
         description,
         panel_type,
@@ -161,6 +190,11 @@ export class GrafanaPanelStore {
         ${pgString(panel.id)},
         ${pgString(panel.tenantId)},
         ${pgString(panel.product)},
+        ${pgString(panel.from)},
+        ${pgString(panel.to)},
+        ${pgString(panel.environment)},
+        ${pgString(panel.tagKey)},
+        ${pgString(panel.tagValue)},
         ${pgString(panel.title)},
         ${pgString(panel.description)},
         ${pgString(panel.panelType)},
@@ -187,6 +221,13 @@ export class GrafanaPanelStore {
     if (!title) throw Object.assign(new Error('title is required'), { statusCode: 400 });
     const panel: GrafanaCustomPanelRecord = {
       ...existing,
+      tenantId: input.tenantId === undefined ? existing.tenantId : normalizeIdentifier(input.tenantId),
+      product: input.product === undefined ? existing.product : normalizeIdentifier(input.product),
+      from: input.from === undefined ? existing.from : normalizeOptionalText(input.from, 'now-6h'),
+      to: input.to === undefined ? existing.to : normalizeOptionalText(input.to, 'now'),
+      environment: input.environment === undefined ? existing.environment : normalizeOptionalText(input.environment, 'production'),
+      tagKey: input.tagKey === undefined ? existing.tagKey : normalizeOptionalText(input.tagKey, ''),
+      tagValue: input.tagValue === undefined ? existing.tagValue : normalizeOptionalText(input.tagValue, ''),
       title,
       description: input.description === undefined ? existing.description : normalizeDescription(input.description),
       panelType: input.panelType || existing.panelType,
@@ -201,7 +242,14 @@ export class GrafanaPanelStore {
     };
     await this.postgres.query(`
       UPDATE grafana_custom_panels
-      SET title = ${pgString(panel.title)},
+      SET tenant_id = ${pgString(panel.tenantId)},
+          product = ${pgString(panel.product)},
+          filter_from = ${pgString(panel.from)},
+          filter_to = ${pgString(panel.to)},
+          environment = ${pgString(panel.environment)},
+          tag_key = ${pgString(panel.tagKey)},
+          tag_value = ${pgString(panel.tagValue)},
+          title = ${pgString(panel.title)},
           description = ${pgString(panel.description)},
           panel_type = ${pgString(panel.panelType)},
           query_sql = ${pgString(panel.querySql)},

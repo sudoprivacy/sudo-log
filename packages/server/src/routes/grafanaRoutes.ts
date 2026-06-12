@@ -346,6 +346,11 @@ export class GrafanaRoutes {
       id: 'preview',
       tenantId: input.tenantId,
       product: input.product,
+      from: input.from || 'now-6h',
+      to: input.to || 'now',
+      environment: input.environment || 'production',
+      tagKey: input.tagKey || '',
+      tagValue: input.tagValue || '',
       title: input.title || 'Preview panel',
       description: input.description || '',
       panelType: input.panelType || 'timeseries',
@@ -381,10 +386,17 @@ export class GrafanaRoutes {
     const id = customPanelIdFromPath(url);
     const existing = await this.requireCustomPanel(id);
     const body = await readJsonBody<CustomPanelBody>(request, this.config.maxBodyBytes);
+    const tenantId = typeof body.tenant_id === 'string' ? safeVariable(body.tenant_id, existing.tenantId).toLowerCase() : existing.tenantId;
+    const product = typeof body.product === 'string' ? safeVariable(body.product, existing.product).toLowerCase() : existing.product;
+    await this.settings.requireEnabledProduct(tenantId, product);
     const panelType = body.panel_type === undefined ? existing.panelType : this.panelType(body.panel_type);
     const querySql = typeof body.query_sql === 'string' ? body.query_sql : existing.querySql;
     validateGrafanaPanelQuery(querySql, panelType, this.config.clickhouse);
+    const filters = this.customPanelFilters(body, existing);
     const panel = await this.panelsStore.update(id, {
+      tenantId,
+      product,
+      ...filters,
       title: typeof body.title === 'string' ? body.title : undefined,
       description: typeof body.description === 'string' ? body.description : undefined,
       panelType,
@@ -570,6 +582,20 @@ export class GrafanaRoutes {
     };
   }
 
+  private customPanelFilters(
+    body: CustomPanelBody,
+    fallback?: Pick<GrafanaCustomPanelRecord, 'from' | 'to' | 'environment' | 'tagKey' | 'tagValue'>,
+  ): Pick<CreateGrafanaCustomPanelInput, 'from' | 'to' | 'environment' | 'tagKey' | 'tagValue'> {
+    const range = selectedTimeRange(typeof body.from === 'string' ? body.from : fallback?.from || null);
+    return {
+      from: range.from,
+      to: range.to,
+      environment: typeof body.environment === 'string' ? safeVariable(body.environment, 'production') : fallback?.environment || 'production',
+      tagKey: typeof body.tag_key === 'string' ? safeTagKey(body.tag_key, '') : fallback?.tagKey || this.config.grafana.defaultTagKey,
+      tagValue: typeof body.tag_value === 'string' ? safeVariable(body.tag_value, '') : fallback?.tagValue || '',
+    };
+  }
+
   private customPanelInput(body: CustomPanelBody, tenantId: string, product: string, actor: string): CreateGrafanaCustomPanelInput {
     const panelType = this.panelType(body.panel_type, 'timeseries');
     if (typeof body.query_sql !== 'string') {
@@ -579,6 +605,7 @@ export class GrafanaRoutes {
     return {
       tenantId,
       product,
+      ...this.customPanelFilters(body),
       title: typeof body.title === 'string' ? body.title : '',
       description: typeof body.description === 'string' ? body.description : undefined,
       panelType,
