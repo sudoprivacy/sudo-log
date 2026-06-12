@@ -700,6 +700,20 @@ function setDashboardRangeOptions(ranges, selectedValue = 'now-6h') {
   el.dashboardRange.value = items.some((range) => range.from === selectedValue) ? selectedValue : items[0]?.from || 'now-6h';
 }
 
+function setDashboardPanelSelection(panel) {
+  if (panel.tenantId && [...el.dashboardTenant.options].some((option) => option.value === panel.tenantId)) {
+    el.dashboardTenant.value = panel.tenantId;
+    renderDashboardProductFilter();
+  }
+  if (panel.product && [...el.dashboardProduct.options].some((option) => option.value === panel.product)) {
+    el.dashboardProduct.value = panel.product;
+  }
+  setDashboardRangeOptions(state.grafana.config?.time_ranges || DASHBOARD_TIME_RANGES, panel.from || 'now-6h');
+  el.dashboardEnvironment.value = panel.environment || 'production';
+  el.dashboardTagKey.value = panel.tagKey || '';
+  el.dashboardTagValue.value = panel.tagValue || '';
+}
+
 function dashboardConfigParams() {
   const selection = dashboardSelection();
   if (!selection) return null;
@@ -945,6 +959,7 @@ async function saveCustomPanel() {
 function editCustomPanel(id) {
   const panel = state.grafana.customPanels.find((item) => item.id === id);
   if (!panel) return;
+  setDashboardPanelSelection(panel);
   el.customPanelId.value = panel.id;
   el.customPanelTitle.value = panel.title || '';
   el.customPanelType.value = panel.panelType || 'timeseries';
