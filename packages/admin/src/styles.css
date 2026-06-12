@@ -180,12 +180,70 @@ label {
   margin-top: 22px;
 }
 
+.login-password-field {
+  display: grid;
+  gap: 5px;
+}
+
+.login-password-field > label {
+  display: block;
+}
+
+.password-input-wrap {
+  position: relative;
+}
+
+.password-input-wrap input {
+  padding-right: 42px;
+}
+
 .login-form button {
   height: 40px;
   border-radius: 7px;
   background: var(--accent);
   color: #fff;
   font-weight: 760;
+}
+
+.login-form .password-toggle {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.login-form .password-toggle:hover,
+.login-form .password-toggle:focus-visible {
+  color: var(--text);
+  background: var(--panel-soft);
+}
+
+.password-eye {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.password-eye-off {
+  display: none;
+}
+
+.password-toggle.is-visible .password-eye-open {
+  display: none;
+}
+
+.password-toggle.is-visible .password-eye-off {
+  display: block;
 }
 
 .form-error,
