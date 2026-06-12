@@ -42,6 +42,7 @@ const ids = [
   'loginForm',
   'loginName',
   'loginPassword',
+  'toggleLoginPassword',
   'loginError',
   'currentUser',
   'logoutButton',
@@ -1708,6 +1709,15 @@ function setView(view) {
 }
 
 function bindEvents() {
+  el.toggleLoginPassword.addEventListener('click', () => {
+    const visible = el.loginPassword.type === 'password';
+    el.loginPassword.type = visible ? 'text' : 'password';
+    el.toggleLoginPassword.classList.toggle('is-visible', visible);
+    el.toggleLoginPassword.setAttribute('aria-label', visible ? '隐藏密码' : '显示密码');
+    el.toggleLoginPassword.setAttribute('title', visible ? '隐藏密码' : '显示密码');
+    el.toggleLoginPassword.setAttribute('aria-pressed', String(visible));
+  });
+
   el.loginForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     el.loginError.textContent = '';
