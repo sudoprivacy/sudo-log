@@ -28,6 +28,7 @@ The gateway creates these tables on startup:
 - `sudo_error_logs`
 - `sudo_log_event_lookup`
 - `sudo_log_tags`
+- `sudo_log_metrics`
 
 ## Common Columns
 
@@ -60,6 +61,7 @@ The gateway creates these tables on startup:
 | `raw_ref` | `String` | Future raw payload reference |
 | `tags_json` | `String` | Redacted search tags as JSON |
 | `tags_kv` | `Array(String)` | Stable `key\x1Fvalue` tag strings for lightweight filtering/debugging |
+| `metrics_json` | `String` | Inferred numeric metrics from incoming tags as JSON |
 | `attributes_json` | `String` | Redacted attributes |
 | `created_at` | `DateTime64(3, 'UTC')` | ClickHouse insert time |
 
@@ -91,10 +93,15 @@ tenant + product + level + user identifier + time range
 
 `sudo_log_tags` is the primary path for tags search. Each normalized tag on a log event is expanded into one row with the same `event_id`, timestamp, tenant, product, and common filter columns. Search queries first filter this table by `tenant_id + product + tag_key + tag_kv_hash + timestamp`, then use `event_id` to read complete rows from `sudo_log_event_lookup`.
 
+`sudo_log_metrics` stores inferred numeric metrics. Each numeric metric on a log event is expanded into one row with `metric_key` and `metric_value`, plus the same tenant, product, event, time, common filter columns, and correlation hashes. Grafana metric mart tables aggregate these rows into one-minute buckets for sum, average, min, max, and P95 panels.
+
 ## Tags Rules
 
 - Tags are optional on ingest.
 - Tags must be a flat object of `string | number | boolean` values.
+- String and boolean values become dimension tags.
+- Finite number values become numeric metrics by default.
+- Numeric values whose keys look like identifiers or categories remain dimension tags. This includes exact keys such as `status`, `status_code`, `http_status`, `http_status_code`, `code`, `error_code`, `exit_code`, and suffixes such as `_id`, `_code`, `_status`, `_version`, and `_level`.
 - Tag keys are normalized to lowercase.
 - Tag keys may contain only lowercase letters, numbers, underscore, dot, and dash.
 - Tag keys may not contain `:` because the query API uses `tag=key:value`.

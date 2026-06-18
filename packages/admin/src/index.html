@@ -293,6 +293,17 @@
                 高度
                 <input id="customPanelHeight" type="number" min="220" max="640" step="20" value="320" />
               </label>
+              <label>
+                单位
+                <select id="customPanelUnit">
+                  <option value="short">Short（短格式）</option>
+                  <option value="none">None（无单位）</option>
+                  <option value="ms">Milliseconds（毫秒）</option>
+                  <option value="percent">Percent（百分比）</option>
+                  <option value="ops">Ops（操作数）</option>
+                  <option value="bytes">Bytes（字节）</option>
+                </select>
+              </label>
               <label class="switch-row custom-panel-enabled">
                 <input id="customPanelEnabled" type="checkbox" checked />
                 启用
@@ -324,6 +335,18 @@
               <div id="customPanelTestResult" class="custom-panel-test hidden"></div>
               <div id="customPanelError" class="error-banner hidden"></div>
             </form>
+            <div class="custom-panel-list-toolbar">
+              <div>
+                <h3>Panel 列表</h3>
+                <span>导出为当前租户/产品下的全量 JSON；导入支持增量合并或全量覆盖。</span>
+              </div>
+              <div class="custom-panel-import-export">
+                <button id="customPanelExport" class="secondary" type="button">导出全部</button>
+                <button id="customPanelImportMerge" class="secondary" type="button">增量导入</button>
+                <button id="customPanelImportReplace" class="danger" type="button">全量覆盖导入</button>
+                <input id="customPanelImportFile" class="hidden" type="file" accept="application/json,.json" />
+              </div>
+            </div>
             <div class="table-wrap">
               <table class="custom-panels-table">
                 <thead>

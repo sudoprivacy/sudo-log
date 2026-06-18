@@ -826,7 +826,7 @@ tbody tr:hover {
   border-bottom: 1px solid var(--line);
   padding: 14px;
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 150px 110px auto;
+  grid-template-columns: minmax(180px, 1fr) 150px 110px 140px auto;
   gap: 10px;
   align-items: end;
 }
@@ -898,6 +898,34 @@ tbody tr:hover {
 
 .custom-panel-test th {
   background: #fff;
+}
+
+.custom-panel-list-toolbar {
+  border-bottom: 1px solid var(--line);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.custom-panel-list-toolbar h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.custom-panel-list-toolbar span {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.custom-panel-import-export {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .custom-panels-table tbody tr {

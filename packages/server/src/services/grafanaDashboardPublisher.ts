@@ -21,11 +21,11 @@ function gridHeight(panel: GrafanaCustomPanelRecord): number {
   return Math.max(7, Math.min(16, Math.round(panel.height / 40)));
 }
 
-function fieldConfig(panelType: GrafanaPanelType): object {
+function fieldConfig(panelType: GrafanaPanelType, unit: string): object {
   if (panelType === 'stat') {
-    return { defaults: { unit: 'short' }, overrides: [] };
+    return { defaults: { unit }, overrides: [] };
   }
-  return { defaults: {}, overrides: [] };
+  return { defaults: unit && unit !== 'short' ? { unit } : {}, overrides: [] };
 }
 
 function panelOptions(panelType: GrafanaPanelType): object {
@@ -94,7 +94,7 @@ export class GrafanaDashboardPublisher {
       panels: [
         {
           datasource: ds,
-          fieldConfig: fieldConfig(panel.panelType),
+          fieldConfig: fieldConfig(panel.panelType, panel.unit || 'short'),
           gridPos: { h: gridHeight(panel), w: 24, x: 0, y: 0 },
           id: 1,
           options: panelOptions(panel.panelType),

@@ -4,11 +4,13 @@ import type { GrafanaPanelType } from '../types/settings.js';
 const BASE_ALLOWED_TABLES = new Set([
   'grafana_log_metrics_1m',
   'grafana_tag_metrics_1m',
+  'grafana_metric_metrics_1m',
+  'grafana_tag_metric_metrics_1m',
   'grafana_tag_keys_1d',
   'grafana_tag_values_1d',
 ]);
 
-const DETAIL_ALLOWED_TABLES = new Set(['grafana_log_events', 'grafana_tag_events']);
+const DETAIL_ALLOWED_TABLES = new Set(['grafana_log_events', 'grafana_tag_events', 'grafana_metric_events']);
 
 const FORBIDDEN_TOKENS = [
   'alter',
@@ -221,7 +223,10 @@ export function validateGrafanaPanelQuery(sql: string, panelType: GrafanaPanelTy
   if (tables.includes('grafana_tag_metrics_1m') && /\btag_value\b/.test(masked)) {
     requirePattern(masked, /\btag_key\s*=/, 'Queries that use tag_value must filter tag_key');
   }
-  if ((tables.includes('grafana_log_events') || tables.includes('grafana_tag_events')) && !/\blimit\s+\d+\b/.test(masked)) {
+  if (tables.includes('grafana_metric_metrics_1m') || tables.includes('grafana_tag_metric_metrics_1m') || tables.includes('grafana_metric_events')) {
+    requirePattern(masked, /\bmetric_key\s*=/, 'Metric queries must filter metric_key');
+  }
+  if ((tables.includes('grafana_log_events') || tables.includes('grafana_tag_events') || tables.includes('grafana_metric_events')) && !/\blimit\s+\d+\b/.test(masked)) {
     throw Object.assign(new Error('Detail table queries must include LIMIT'), { statusCode: 400 });
   }
   if (panelType === 'timeseries') {

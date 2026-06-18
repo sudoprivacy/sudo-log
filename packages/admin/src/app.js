@@ -95,6 +95,7 @@ const ids = [
   'customPanelTitle',
   'customPanelType',
   'customPanelHeight',
+  'customPanelUnit',
   'customPanelEnabled',
   'customPanelSql',
   'customPanelTest',
@@ -106,6 +107,10 @@ const ids = [
   'customPanelTestResult',
   'customPanelReset',
   'customPanelError',
+  'customPanelExport',
+  'customPanelImportMerge',
+  'customPanelImportReplace',
+  'customPanelImportFile',
   'customPanelsBody',
   'customPanelsEmpty',
   'customPanelsPagination',
@@ -721,6 +726,12 @@ function dashboardConfigParams() {
     tenant_id: selection.tenantId,
     product: selection.product,
   });
+  return params;
+}
+
+function panelManagerConfigParams() {
+  const params = dashboardConfigParams();
+  if (!params) return null;
   params.set('from', el.dashboardRange.value || 'now-6h');
   if (el.dashboardEnvironment.value.trim()) params.set('environment', el.dashboardEnvironment.value.trim());
   if (el.dashboardTagKey.value.trim()) params.set('tag_key', el.dashboardTagKey.value.trim());
@@ -767,7 +778,7 @@ async function loadCustomPanels() {
     renderCustomPanels();
     return;
   }
-  const params = dashboardConfigParams();
+  const params = panelManagerConfigParams();
   if (!params) return;
   try {
     const response = await api(`/api/grafana/custom-panels?${params.toString()}`);
@@ -839,6 +850,7 @@ function resetCustomPanelForm() {
   el.customPanelForm.reset();
   el.customPanelType.value = 'timeseries';
   el.customPanelHeight.value = '320';
+  el.customPanelUnit.value = 'short';
   el.customPanelEnabled.checked = true;
   el.customPanelSql.value = DEFAULT_CUSTOM_PANEL_SQL;
   showCustomPanelError('');
@@ -855,6 +867,7 @@ function customPanelPayload() {
     title: el.customPanelTitle.value.trim(),
     panel_type: el.customPanelType.value,
     height: Number(el.customPanelHeight.value || 320),
+    unit: el.customPanelUnit.value || 'short',
     enabled: el.customPanelEnabled.checked,
     query_sql: el.customPanelSql.value.trim(),
     from: el.dashboardRange.value || 'now-6h',
@@ -964,6 +977,7 @@ function editCustomPanel(id) {
   el.customPanelTitle.value = panel.title || '';
   el.customPanelType.value = panel.panelType || 'timeseries';
   el.customPanelHeight.value = String(panel.height || 320);
+  el.customPanelUnit.value = panel.unit || 'short';
   el.customPanelEnabled.checked = Boolean(panel.enabled);
   el.customPanelSql.value = panel.querySql || DEFAULT_CUSTOM_PANEL_SQL;
   showCustomPanelError('');
@@ -1000,6 +1014,85 @@ async function deleteCustomPanel(id) {
     await loadGrafanaEmbedConfig();
   } catch (error) {
     showCustomPanelError(error instanceof Error ? error.message : '删除自定义面板失败');
+  }
+}
+
+function downloadJson(filename, data) {
+  const blob = new Blob([`${JSON.stringify(data, null, 2)}\n`], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function exportCustomPanels() {
+  showCustomPanelError('');
+  const selection = dashboardSelection();
+  if (!selection) {
+    showCustomPanelError('请先选择租户和产品');
+    return;
+  }
+  try {
+    const params = new URLSearchParams({
+      tenant_id: selection.tenantId,
+      product: selection.product,
+    });
+    const response = await api(`/api/grafana/custom-panels/export?${params.toString()}`);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    downloadJson(`sudo-log-panels-${selection.tenantId}-${selection.product}-${stamp}.json`, response.data || {});
+    showCustomPanelError('导出成功。', 'ok');
+  } catch (error) {
+    showCustomPanelError(error instanceof Error ? error.message : '导出自定义面板失败');
+  }
+}
+
+function pickCustomPanelImportFile(mode) {
+  el.customPanelImportFile.dataset.mode = mode;
+  el.customPanelImportFile.value = '';
+  el.customPanelImportFile.click();
+}
+
+async function importCustomPanels(file, mode) {
+  showCustomPanelError('');
+  const selection = dashboardSelection();
+  if (!selection) {
+    showCustomPanelError('请先选择租户和产品');
+    return;
+  }
+  if (!file) return;
+
+  if (mode === 'replace') {
+    const confirmed = window.confirm(
+      `确认全量覆盖导入 ${selection.tenantId}/${selection.product} 的 Panel？当前列表中的所有 Panel 会先删除，再导入 JSON 文件内容。`,
+    );
+    if (!confirmed) return;
+  }
+
+  try {
+    const parsed = JSON.parse(await file.text());
+    const panels = Array.isArray(parsed) ? parsed : parsed.panels;
+    if (!Array.isArray(panels)) throw new Error('JSON 必须是数组或包含 panels 数组');
+    const response = await api('/api/grafana/custom-panels/import', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        tenant_id: selection.tenantId,
+        product: selection.product,
+        mode,
+        confirm_replace: mode === 'replace',
+        panels,
+      }),
+    });
+    const data = response.data || {};
+    resetPagination('customPanels');
+    await loadGrafanaEmbedConfig();
+    showCustomPanelError(`导入完成：新增 ${Number(data.created || 0)} 个，更新 ${Number(data.updated || 0)} 个。`, 'ok');
+  } catch (error) {
+    showCustomPanelError(error instanceof Error ? error.message : '导入自定义面板失败');
   }
 }
 
@@ -1762,6 +1855,13 @@ function bindEvents() {
   el.customPanelPreview.addEventListener('click', previewCustomPanel);
   el.customPanelPreviewFrame.addEventListener('error', () => el.customPanelPreviewPanel.classList.add('has-error'));
   el.customPanelReset.addEventListener('click', resetCustomPanelForm);
+  el.customPanelExport.addEventListener('click', exportCustomPanels);
+  el.customPanelImportMerge.addEventListener('click', () => pickCustomPanelImportFile('merge'));
+  el.customPanelImportReplace.addEventListener('click', () => pickCustomPanelImportFile('replace'));
+  el.customPanelImportFile.addEventListener('change', async () => {
+    await importCustomPanels(el.customPanelImportFile.files?.[0], el.customPanelImportFile.dataset.mode || 'merge');
+    el.customPanelImportFile.value = '';
+  });
   el.customPanelsBody.addEventListener('click', async (event) => {
     const button = event.target.closest('button[data-action]');
     if (!button || button.disabled) return;

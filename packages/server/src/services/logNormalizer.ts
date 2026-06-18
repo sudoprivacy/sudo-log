@@ -11,6 +11,17 @@ const MAX_TAG_KEY_LENGTH = 64;
 const MAX_TAG_VALUE_LENGTH = 256;
 const MAX_TAGS_JSON_BYTES = 4096;
 const TAG_KEY_PATTERN = /^[a-z0-9_.-]+$/;
+const NUMERIC_DIMENSION_KEYS = new Set([
+  'code',
+  'error_code',
+  'exit_code',
+  'http_status',
+  'http_status_code',
+  'port',
+  'status',
+  'status_code',
+]);
+const NUMERIC_DIMENSION_SUFFIXES = ['_id', '.id', '-id', '_code', '.code', '-code', '_status', '.status', '-status', '_version', '.version', '-version', '_level', '.level', '-level'];
 const RESERVED_TAG_KEYS = new Set([
   'tenant_id',
   'product',
@@ -69,8 +80,12 @@ function validationError(message: string): Error {
   return Object.assign(new Error(message), { statusCode: 400 });
 }
 
-function normalizeTags(raw: unknown): Record<string, string> {
-  if (raw === undefined || raw === null) return {};
+function isNumericDimensionKey(key: string): boolean {
+  return NUMERIC_DIMENSION_KEYS.has(key) || NUMERIC_DIMENSION_SUFFIXES.some((suffix) => key.endsWith(suffix));
+}
+
+function normalizeTags(raw: unknown): { dimensions: Record<string, string>; metrics: Record<string, number> } {
+  if (raw === undefined || raw === null) return { dimensions: {}, metrics: {} };
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw validationError('tags must be a flat object');
   }
@@ -80,14 +95,15 @@ function normalizeTags(raw: unknown): Record<string, string> {
     throw validationError(`tags must contain no more than ${MAX_TAG_COUNT} entries`);
   }
 
-  const tags: Record<string, string> = {};
+  const dimensions: Record<string, string> = {};
+  const metrics: Record<string, number> = {};
   for (const [rawKey, rawValue] of entries) {
     const key = rawKey.trim().toLowerCase();
     if (!key) throw validationError('tag key must not be empty');
     if (key.length > MAX_TAG_KEY_LENGTH) throw validationError(`tag key must be <= ${MAX_TAG_KEY_LENGTH} characters`);
     if (!TAG_KEY_PATTERN.test(key)) throw validationError('tag key may contain only lowercase letters, numbers, underscore, dot, and dash');
     if (RESERVED_TAG_KEYS.has(key)) throw validationError(`tag key is reserved: ${key}`);
-    if (Object.hasOwn(tags, key)) throw validationError(`duplicate tag key: ${key}`);
+    if (Object.hasOwn(dimensions, key) || Object.hasOwn(metrics, key)) throw validationError(`duplicate tag key: ${key}`);
     if (rawValue === undefined || rawValue === null || typeof rawValue === 'object') {
       throw validationError(`tag value for ${key} must be a string, number, or boolean`);
     }
@@ -97,14 +113,19 @@ function normalizeTags(raw: unknown): Record<string, string> {
     if (value.length > MAX_TAG_VALUE_LENGTH) {
       throw validationError(`tag value for ${key} must be <= ${MAX_TAG_VALUE_LENGTH} characters`);
     }
-    tags[key] = value;
+
+    if (typeof rawValue === 'number' && Number.isFinite(rawValue) && !isNumericDimensionKey(key)) {
+      metrics[key] = rawValue;
+    } else {
+      dimensions[key] = value;
+    }
   }
 
-  if (Buffer.byteLength(JSON.stringify(tags), 'utf8') > MAX_TAGS_JSON_BYTES) {
+  if (Buffer.byteLength(JSON.stringify(dimensions), 'utf8') > MAX_TAGS_JSON_BYTES) {
     throw validationError(`tags JSON must be <= ${MAX_TAGS_JSON_BYTES} bytes`);
   }
 
-  return tags;
+  return { dimensions, metrics };
 }
 
 function tagsKv(tags: Record<string, string>): string[] {
@@ -128,7 +149,7 @@ export async function normalizeLogEvent(
   const errorHash = errorName || errorMessage || stackTrace ? stableErrorHash(errorName, errorMessage, redactString(stackTrace)) : '';
 
   const attributes = sanitizeAttributes(input.attributes);
-  const tags = normalizeTags(input.tags);
+  const { dimensions, metrics } = normalizeTags(input.tags);
   const receivedAt = new Date().toISOString().replace('T', ' ').replace('Z', '');
 
   return {
@@ -157,8 +178,9 @@ export async function normalizeLogEvent(
     stack_hash: stackHash,
     stack_ref: stackRef,
     raw_ref: '',
-    tags_json: JSON.stringify(tags),
-    tags_kv: tagsKv(tags),
+    tags_json: JSON.stringify(dimensions),
+    tags_kv: tagsKv(dimensions),
+    metrics_json: JSON.stringify(metrics),
     attributes_json: JSON.stringify(attributes),
   };
 }
