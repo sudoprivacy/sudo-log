@@ -68,6 +68,7 @@ export interface NormalizedLogRow {
   raw_ref: string;
   tags_json: string;
   tags_kv: string[];
+  metrics_json: string;
   attributes_json: string;
 }
 
@@ -83,6 +84,30 @@ export interface NormalizedLogTagRow {
   level: LogLevel;
   topic: string;
   environment: string;
+  component: string;
+  version: string;
+  platform: string;
+  arch: string;
+  user_identifier_hash: string;
+  user_id_hash: string;
+  device_id_hash: string;
+  session_id: string;
+  conversation_id: string;
+  trace_id: string;
+  error_hash: string;
+}
+
+export interface NormalizedLogMetricRow {
+  timestamp: string;
+  received_at: string;
+  event_id: string;
+  tenant_id: string;
+  product: string;
+  metric_key: string;
+  metric_value: number;
+  topic: string;
+  environment: string;
+  level: LogLevel;
   component: string;
   version: string;
   platform: string;

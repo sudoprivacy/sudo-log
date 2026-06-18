@@ -298,7 +298,9 @@ Rules:
 - `user_identifier`, `user_id`, and `device_id` are hashed server-side as `lowercase_hex_sha256(trim(raw-id))`.
 - `user_identifier_hash`, `user_id_hash`, and `device_id_hash` can be sent directly if already hashed, but they must be 64-character lowercase hex SHA-256 strings without a `sha256:` prefix or user/device lookups will not match.
 - `error.stack` or `stack_trace` is required when `level` is `error` or `fatal`.
-- `tags` is an optional flat object used for `key:value` search. Tag values may be strings, numbers, or booleans.
+- `tags` is an optional flat object used for `key:value` search and metric inference. String and boolean values become dimension tags. Finite number values become numeric metrics by default.
+- Numeric tag values whose keys look like identifiers or categories remain dimension tags. This includes exact keys such as `status`, `status_code`, `http_status`, `http_status_code`, `code`, `error_code`, `exit_code`, and suffixes such as `_id`, `_code`, `_status`, `_version`, and `_level`.
+- Inferred dimension tags are stored in `tags_json` and support `tag=key:value` search. Inferred numeric metrics are stored in `metrics_json` and metric mart tables for Grafana aggregations such as sum, average, min, max, and P95.
 - Each log may contain at most 20 tags. Tag keys are normalized to lowercase and may contain only lowercase letters, numbers, underscore, dot, and dash.
 - Tag keys may not contain `:` because search uses `tag=key:value` query syntax.
 - Tag key length must be <= 64 characters. Tag value length must be <= 256 characters. Serialized `tags` must be <= 4096 bytes.

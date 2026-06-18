@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { pgBoolean, pgString, type PgRow, type PostgresClient } from '../db/postgres.js';
 import type {
   CreateGrafanaCustomPanelInput,
+  GrafanaCustomPanelExportData,
+  GrafanaCustomPanelExportItem,
   GrafanaCustomPanelRecord,
   GrafanaPanelType,
   UpdateGrafanaCustomPanelInput,
@@ -31,6 +33,7 @@ function toPanel(row: PgRow): GrafanaCustomPanelRecord {
     panelType: panelType(row.panel_type),
     querySql: row.query_sql || '',
     height: Number.parseInt(row.height || '320', 10),
+    unit: row.unit || 'short',
     enabled: pgBool(row.enabled),
     dashboardUid: row.dashboard_uid || '',
     dashboardSlug: row.dashboard_slug || '',
@@ -64,6 +67,11 @@ function normalizeHeight(value: number | undefined): number {
   return Math.max(220, Math.min(Math.round(value || 320), 640));
 }
 
+function normalizeUnit(value: string | undefined): string {
+  const unit = value?.trim() || 'short';
+  return /^[a-zA-Z0-9_.$/%:-]{1,64}$/.test(unit) ? unit : 'short';
+}
+
 function slugify(value: string): string {
   const slug = value
     .trim()
@@ -71,6 +79,23 @@ function slugify(value: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
   return slug || 'custom-panel';
+}
+
+function toExportItem(panel: GrafanaCustomPanelRecord): GrafanaCustomPanelExportItem {
+  return {
+    title: panel.title,
+    description: panel.description,
+    panelType: panel.panelType,
+    querySql: panel.querySql,
+    height: panel.height,
+    unit: panel.unit,
+    enabled: panel.enabled,
+    from: panel.from,
+    to: panel.to,
+    environment: panel.environment,
+    tagKey: panel.tagKey,
+    tagValue: panel.tagValue,
+  };
 }
 
 export class GrafanaPanelStore {
@@ -92,6 +117,7 @@ export class GrafanaPanelStore {
         panel_type TEXT NOT NULL,
         query_sql TEXT NOT NULL,
         height INTEGER NOT NULL,
+        unit TEXT NOT NULL DEFAULT 'short',
         enabled BOOLEAN NOT NULL DEFAULT TRUE,
         dashboard_uid TEXT NOT NULL UNIQUE,
         dashboard_slug TEXT NOT NULL,
@@ -108,6 +134,7 @@ export class GrafanaPanelStore {
     await this.postgres.query("ALTER TABLE grafana_custom_panels ADD COLUMN IF NOT EXISTS environment TEXT NOT NULL DEFAULT 'production'");
     await this.postgres.query("ALTER TABLE grafana_custom_panels ADD COLUMN IF NOT EXISTS tag_key TEXT NOT NULL DEFAULT ''");
     await this.postgres.query("ALTER TABLE grafana_custom_panels ADD COLUMN IF NOT EXISTS tag_value TEXT NOT NULL DEFAULT ''");
+    await this.postgres.query("ALTER TABLE grafana_custom_panels ADD COLUMN IF NOT EXISTS unit TEXT NOT NULL DEFAULT 'short'");
   }
 
   public async list(tenantId: string, product: string, enabledOnly = false): Promise<GrafanaCustomPanelRecord[]> {
@@ -126,6 +153,64 @@ export class GrafanaPanelStore {
   public async find(id: string): Promise<GrafanaCustomPanelRecord | null> {
     const rows = await this.postgres.query(`SELECT * FROM grafana_custom_panels WHERE id = ${pgString(id)} LIMIT 1`);
     return rows[0] ? toPanel(rows[0]) : null;
+  }
+
+  public async export(tenantId: string, product: string): Promise<GrafanaCustomPanelExportData> {
+    const normalizedTenantId = normalizeIdentifier(tenantId);
+    const normalizedProduct = normalizeIdentifier(product);
+    const panels = await this.list(normalizedTenantId, normalizedProduct);
+    return {
+      version: 1,
+      kind: 'sudo-log.grafana-custom-panels',
+      exportedAt: new Date().toISOString(),
+      tenantId: normalizedTenantId,
+      product: normalizedProduct,
+      panels: panels.map(toExportItem),
+    };
+  }
+
+  public async findByTitle(tenantId: string, product: string, title: string): Promise<GrafanaCustomPanelRecord | null> {
+    const normalizedTenantId = normalizeIdentifier(tenantId);
+    const normalizedProduct = normalizeIdentifier(product);
+    const normalizedTitle = normalizeTitle(title);
+    const rows = await this.postgres.query(`
+      SELECT *
+      FROM grafana_custom_panels
+      WHERE tenant_id = ${pgString(normalizedTenantId)}
+        AND product = ${pgString(normalizedProduct)}
+        AND title = ${pgString(normalizedTitle)}
+      ORDER BY updated_at DESC, created_at DESC
+      LIMIT 1
+    `);
+    return rows[0] ? toPanel(rows[0]) : null;
+  }
+
+  public async upsertByTitle(input: CreateGrafanaCustomPanelInput): Promise<{ panel: GrafanaCustomPanelRecord; created: boolean }> {
+    const existing = await this.findByTitle(input.tenantId, input.product, input.title);
+    if (!existing) {
+      return { panel: await this.create(input), created: true };
+    }
+
+    return {
+      panel: await this.update(existing.id, {
+        tenantId: input.tenantId,
+        product: input.product,
+        from: input.from,
+        to: input.to,
+        environment: input.environment,
+        tagKey: input.tagKey,
+        tagValue: input.tagValue,
+        title: input.title,
+        description: input.description,
+        panelType: input.panelType,
+        querySql: input.querySql,
+        height: input.height,
+        unit: input.unit,
+        enabled: input.enabled,
+        actor: input.actor,
+      }),
+      created: false,
+    };
   }
 
   public async create(input: CreateGrafanaCustomPanelInput): Promise<GrafanaCustomPanelRecord> {
@@ -151,6 +236,7 @@ export class GrafanaPanelStore {
       panelType: input.panelType || 'timeseries',
       querySql: input.querySql.trim(),
       height: normalizeHeight(input.height),
+      unit: normalizeUnit(input.unit),
       enabled: input.enabled ?? true,
       dashboardUid,
       dashboardSlug,
@@ -176,6 +262,7 @@ export class GrafanaPanelStore {
         panel_type,
         query_sql,
         height,
+        unit,
         enabled,
         dashboard_uid,
         dashboard_slug,
@@ -200,6 +287,7 @@ export class GrafanaPanelStore {
         ${pgString(panel.panelType)},
         ${pgString(panel.querySql)},
         ${panel.height},
+        ${pgString(panel.unit)},
         ${pgBoolean(panel.enabled)},
         ${pgString(panel.dashboardUid)},
         ${pgString(panel.dashboardSlug)},
@@ -233,6 +321,7 @@ export class GrafanaPanelStore {
       panelType: input.panelType || existing.panelType,
       querySql: input.querySql === undefined ? existing.querySql : input.querySql.trim(),
       height: input.height === undefined ? existing.height : normalizeHeight(input.height),
+      unit: input.unit === undefined ? existing.unit : normalizeUnit(input.unit),
       enabled: input.enabled ?? existing.enabled,
       dashboardSlug: input.title === undefined ? existing.dashboardSlug : slugify(title),
       updatedBy: input.actor,
@@ -254,6 +343,7 @@ export class GrafanaPanelStore {
           panel_type = ${pgString(panel.panelType)},
           query_sql = ${pgString(panel.querySql)},
           height = ${panel.height},
+          unit = ${pgString(panel.unit)},
           enabled = ${pgBoolean(panel.enabled)},
           dashboard_slug = ${pgString(panel.dashboardSlug)},
           updated_by = ${pgString(panel.updatedBy)},
@@ -294,6 +384,18 @@ export class GrafanaPanelStore {
     const existing = await this.find(id);
     if (!existing) throw Object.assign(new Error('Custom panel not found'), { statusCode: 404 });
     await this.postgres.query(`DELETE FROM grafana_custom_panels WHERE id = ${pgString(id)}`);
+    return existing;
+  }
+
+  public async deleteByProduct(tenantId: string, product: string): Promise<GrafanaCustomPanelRecord[]> {
+    const normalizedTenantId = normalizeIdentifier(tenantId);
+    const normalizedProduct = normalizeIdentifier(product);
+    const existing = await this.list(normalizedTenantId, normalizedProduct);
+    await this.postgres.query(`
+      DELETE FROM grafana_custom_panels
+      WHERE tenant_id = ${pgString(normalizedTenantId)}
+        AND product = ${pgString(normalizedProduct)}
+    `);
     return existing;
   }
 }

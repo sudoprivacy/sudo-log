@@ -74,6 +74,18 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === 'GET' && url.pathname === '/api/grafana/custom-panels/export') {
+      await auth.authorize(request, 'dashboards:write');
+      await grafanaRoutes.exportCustomPanels(url, response);
+      return;
+    }
+
+    if (request.method === 'POST' && url.pathname === '/api/grafana/custom-panels/import') {
+      const principal = await auth.authorize(request, 'dashboards:write');
+      await grafanaRoutes.importCustomPanels(request, response, principal);
+      return;
+    }
+
     if (request.method === 'POST' && url.pathname === '/api/grafana/custom-panels/test') {
       await auth.authorize(request, 'dashboards:write');
       await grafanaRoutes.testCustomPanel(request, response);

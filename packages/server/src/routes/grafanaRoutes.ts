@@ -10,7 +10,7 @@ import { GrafanaDashboardPublisher } from '../services/grafanaDashboardPublisher
 import { isGrafanaPanelType, renderGrafanaPanelTestQuery, validateGrafanaPanelQuery } from '../services/grafanaPanelSql.js';
 import type { GrafanaPanelStore } from '../services/grafanaPanelStore.js';
 import type { SettingsStore } from '../services/settingsStore.js';
-import type { CreateGrafanaCustomPanelInput, GrafanaCustomPanelRecord, GrafanaPanelType } from '../types/settings.js';
+import type { CreateGrafanaCustomPanelInput, GrafanaCustomPanelExportItem, GrafanaCustomPanelRecord, GrafanaPanelType } from '../types/settings.js';
 
 const EMBED_COOKIE = 'sudowork_grafana_embed';
 const EMBED_COOKIE_TTL_SECONDS = 60 * 60;
@@ -24,12 +24,21 @@ interface CustomPanelBody {
   panel_type?: unknown;
   query_sql?: unknown;
   height?: unknown;
+  unit?: unknown;
   enabled?: unknown;
   from?: unknown;
   to?: unknown;
   environment?: unknown;
   tag_key?: unknown;
   tag_value?: unknown;
+}
+
+interface CustomPanelImportBody {
+  mode?: unknown;
+  confirm_replace?: unknown;
+  tenant_id?: unknown;
+  product?: unknown;
+  panels?: unknown;
 }
 
 function normalizeBasePath(value: string): string {
@@ -159,6 +168,41 @@ function isAllowedGrafanaPath(pathname: string, basePath: string): boolean {
   );
 }
 
+function customPanelImportItems(value: unknown): unknown[] {
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === 'object' && Array.isArray((value as { panels?: unknown }).panels)) {
+    return (value as { panels: unknown[] }).panels;
+  }
+  throw Object.assign(new Error('import JSON must be an array or contain panels array'), { statusCode: 400 });
+}
+
+function customPanelImportItem(value: unknown): GrafanaCustomPanelExportItem {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw Object.assign(new Error('each imported panel must be an object'), { statusCode: 400 });
+  }
+  const item = value as Record<string, unknown>;
+  if (typeof item.title !== 'string' || !item.title.trim()) {
+    throw Object.assign(new Error('imported panel title is required'), { statusCode: 400 });
+  }
+  if (typeof item.querySql !== 'string' || !item.querySql.trim()) {
+    throw Object.assign(new Error(`imported panel ${item.title} querySql is required`), { statusCode: 400 });
+  }
+  return {
+    title: item.title,
+    description: typeof item.description === 'string' ? item.description : '',
+    panelType: isGrafanaPanelType(item.panelType) ? item.panelType : 'timeseries',
+    querySql: item.querySql,
+    height: typeof item.height === 'number' ? item.height : undefined,
+    unit: typeof item.unit === 'string' ? item.unit : undefined,
+    enabled: typeof item.enabled === 'boolean' ? item.enabled : true,
+    from: typeof item.from === 'string' ? item.from : undefined,
+    to: typeof item.to === 'string' ? item.to : undefined,
+    environment: typeof item.environment === 'string' ? item.environment : undefined,
+    tagKey: typeof item.tagKey === 'string' ? item.tagKey : undefined,
+    tagValue: typeof item.tagValue === 'string' ? item.tagValue : undefined,
+  };
+}
+
 function proxiedGrafanaPath(pathname: string, basePath: string): string {
   return pathname.slice(basePath.length) || '/';
 }
@@ -220,18 +264,16 @@ export class GrafanaRoutes {
     const product = safeVariable(url.searchParams.get('product') || 'sudowork', 'sudowork').toLowerCase();
     await this.settings.requireEnabledProduct(tenantId, product);
 
-    const range = selectedTimeRange(url.searchParams.get('from'));
-    const environment = safeVariable(url.searchParams.get('environment') || 'production', 'production');
     const tagKeys = await this.repository.grafanaTagKeys(tenantId, product);
     const defaultTagKey = safeTagKey(this.config.grafana.defaultTagKey, 'feature');
-    const rawTagKey = url.searchParams.has('tag_key') ? url.searchParams.get('tag_key') || '' : tagKeys[0] || defaultTagKey;
+    const rawTagKey = url.searchParams.has('tag_key') ? url.searchParams.get('tag_key') || '' : '';
     const requestedTagKey = rawTagKey ? safeTagKey(rawTagKey, defaultTagKey) : '';
     const selectedTagKey =
       !requestedTagKey || tagKeys.includes(requestedTagKey) || requestedTagKey === defaultTagKey
         ? requestedTagKey
         : tagKeys[0] || defaultTagKey;
     const tagValues = selectedTagKey ? await this.repository.grafanaTagValues(tenantId, product, selectedTagKey) : [];
-    const rawTagValue = url.searchParams.has('tag_value') ? url.searchParams.get('tag_value') || '' : this.config.grafana.defaultTagValue;
+    const rawTagValue = url.searchParams.has('tag_value') ? url.searchParams.get('tag_value') || '' : '';
     const requestedTagValue = safeVariable(rawTagValue, '');
     const selectedTagValue = requestedTagValue ? (tagValues.includes(requestedTagValue) ? requestedTagValue : tagValues[0] || '') : '';
     const normalizedTagKeys = [...new Set([selectedTagKey, ...tagKeys, defaultTagKey].filter(Boolean))];
@@ -251,19 +293,19 @@ export class GrafanaRoutes {
           tag_keys: normalizedTagKeys,
           tag_values: normalizedTagValues,
           selected: {
-            from: range.from,
-            to: range.to,
-            environment,
+            from: '',
+            to: '',
+            environment: '',
             tag_key: selectedTagKey,
             tag_value: selectedTagValue,
           },
           panels: customPanels.map((panel) =>
             this.customPanel(panel, {
-              from: range.from,
-              to: range.to,
-              environment,
-              tagKey: selectedTagKey,
-              tagValue: selectedTagValue,
+              from: panel.from,
+              to: panel.to,
+              environment: panel.environment,
+              tagKey: panel.tagKey,
+              tagValue: panel.tagValue,
             }),
           ),
         },
@@ -281,6 +323,13 @@ export class GrafanaRoutes {
     sendJson(response, 200, { success: true, data: await this.panelsStore.list(tenantId, product) });
   }
 
+  public async exportCustomPanels(url: URL, response: ServerResponse): Promise<void> {
+    const tenantId = safeVariable(url.searchParams.get('tenant_id') || 'sudo', 'sudo').toLowerCase();
+    const product = safeVariable(url.searchParams.get('product') || 'sudowork', 'sudowork').toLowerCase();
+    await this.settings.requireEnabledProduct(tenantId, product);
+    sendJson(response, 200, { success: true, data: await this.panelsStore.export(tenantId, product) });
+  }
+
   public async createCustomPanel(request: IncomingMessage, response: ServerResponse, principal: Principal): Promise<void> {
     const body = await readJsonBody<CustomPanelBody>(request, this.config.maxBodyBytes);
     const tenantId = typeof body.tenant_id === 'string' ? safeVariable(body.tenant_id, 'sudo').toLowerCase() : 'sudo';
@@ -289,6 +338,57 @@ export class GrafanaRoutes {
     const input = this.customPanelInput(body, tenantId, product, principal.username);
     const panel = await this.panelsStore.create(input);
     sendJson(response, 201, { success: true, data: await this.publishAndRecord(panel) });
+  }
+
+  public async importCustomPanels(request: IncomingMessage, response: ServerResponse, principal: Principal): Promise<void> {
+    const body = await readJsonBody<CustomPanelImportBody>(request, this.config.maxBodyBytes);
+    const tenantId = typeof body.tenant_id === 'string' ? safeVariable(body.tenant_id, 'sudo').toLowerCase() : 'sudo';
+    const product = typeof body.product === 'string' ? safeVariable(body.product, 'sudowork').toLowerCase() : 'sudowork';
+    await this.settings.requireEnabledProduct(tenantId, product);
+
+    const mode = body.mode === 'replace' ? 'replace' : 'merge';
+    if (mode === 'replace' && body.confirm_replace !== true) {
+      throw Object.assign(new Error('confirm_replace is required for full replacement import'), { statusCode: 400 });
+    }
+
+    const items = customPanelImportItems(body).map(customPanelImportItem);
+    if (items.length > 200) {
+      throw Object.assign(new Error('import supports at most 200 panels'), { statusCode: 400 });
+    }
+
+    const inputs = items.map((item) => this.importPanelInput(item, tenantId, product, principal.username));
+    if (mode === 'replace') {
+      const deletedPanels = await this.panelsStore.deleteByProduct(tenantId, product);
+      for (const panel of deletedPanels) {
+        try {
+          await this.publisher.delete(panel);
+        } catch (error) {
+          console.warn('sudo-log could not delete replaced custom Grafana dashboard', error);
+        }
+      }
+    }
+
+    const panels: GrafanaCustomPanelRecord[] = [];
+    let created = 0;
+    let updated = 0;
+    for (const input of inputs) {
+      const result = mode === 'replace' ? { panel: await this.panelsStore.create(input), created: true } : await this.panelsStore.upsertByTitle(input);
+      created += result.created ? 1 : 0;
+      updated += result.created ? 0 : 1;
+      panels.push(await this.publishAndRecord(result.panel));
+    }
+
+    sendJson(response, 200, {
+      success: true,
+      data: {
+        mode,
+        received: items.length,
+        created,
+        updated,
+        replaced: mode === 'replace',
+        panels,
+      },
+    });
   }
 
   public async testCustomPanel(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -356,6 +456,7 @@ export class GrafanaRoutes {
       panelType: input.panelType || 'timeseries',
       querySql: input.querySql,
       height: input.height || 320,
+      unit: input.unit || 'short',
       enabled: true,
       dashboardUid: grafanaPreviewUid(principal),
       dashboardSlug: 'preview-panel',
@@ -402,6 +503,7 @@ export class GrafanaRoutes {
       panelType,
       querySql,
       height: typeof body.height === 'number' ? body.height : undefined,
+      unit: typeof body.unit === 'string' ? body.unit : undefined,
       enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
       actor: principal.username,
     });
@@ -611,7 +713,30 @@ export class GrafanaRoutes {
       panelType,
       querySql: body.query_sql,
       height: typeof body.height === 'number' ? body.height : undefined,
+      unit: typeof body.unit === 'string' ? body.unit : undefined,
       enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
+      actor,
+    };
+  }
+
+  private importPanelInput(item: GrafanaCustomPanelExportItem, tenantId: string, product: string, actor: string): CreateGrafanaCustomPanelInput {
+    const panelType = item.panelType || 'timeseries';
+    validateGrafanaPanelQuery(item.querySql, panelType, this.config.clickhouse);
+    return {
+      tenantId,
+      product,
+      from: item.from,
+      to: item.to,
+      environment: item.environment,
+      tagKey: item.tagKey,
+      tagValue: item.tagValue,
+      title: item.title,
+      description: item.description,
+      panelType,
+      querySql: item.querySql,
+      height: item.height,
+      unit: item.unit,
+      enabled: item.enabled,
       actor,
     };
   }

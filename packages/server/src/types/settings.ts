@@ -67,6 +67,7 @@ export interface GrafanaCustomPanelRecord {
   panelType: GrafanaPanelType;
   querySql: string;
   height: number;
+  unit: string;
   enabled: boolean;
   dashboardUid: string;
   dashboardSlug: string;
@@ -91,6 +92,7 @@ export interface CreateGrafanaCustomPanelInput {
   panelType?: GrafanaPanelType;
   querySql: string;
   height?: number;
+  unit?: string;
   enabled?: boolean;
   actor: string;
 }
@@ -108,6 +110,31 @@ export interface UpdateGrafanaCustomPanelInput {
   panelType?: GrafanaPanelType;
   querySql?: string;
   height?: number;
+  unit?: string;
   enabled?: boolean;
   actor: string;
+}
+
+export interface GrafanaCustomPanelExportItem {
+  title: string;
+  description?: string;
+  panelType?: GrafanaPanelType;
+  querySql: string;
+  height?: number;
+  unit?: string;
+  enabled?: boolean;
+  from?: string;
+  to?: string;
+  environment?: string;
+  tagKey?: string;
+  tagValue?: string;
+}
+
+export interface GrafanaCustomPanelExportData {
+  version: 1;
+  kind: 'sudo-log.grafana-custom-panels';
+  exportedAt: string;
+  tenantId: string;
+  product: string;
+  panels: GrafanaCustomPanelExportItem[];
 }
