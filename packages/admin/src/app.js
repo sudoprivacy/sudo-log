@@ -799,9 +799,9 @@ function renderDashboardConfig(config) {
 
   const selected = config.selected || {};
   setDashboardRangeOptions(config.time_ranges || DASHBOARD_TIME_RANGES, selected.from || el.dashboardRange.value || 'now-6h');
-  el.dashboardEnvironment.value = selected.environment || '';
+  el.dashboardEnvironment.value = selected.environment || el.dashboardEnvironment.value || '';
   el.dashboardTagKey.value = selected.tag_key || el.dashboardTagKey.value || '';
-  el.dashboardTagValue.value = selected.tag_value || '';
+  el.dashboardTagValue.value = selected.tag_value || el.dashboardTagValue.value || '';
   renderDashboardPanels(config.panels || []);
 }
 
