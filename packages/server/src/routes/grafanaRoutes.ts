@@ -517,6 +517,11 @@ export class GrafanaRoutes {
     sendJson(response, 200, { success: true, data: await this.publishAndRecord(panel) });
   }
 
+  public async pinCustomPanel(url: URL, response: ServerResponse, principal: Principal): Promise<void> {
+    const panel = await this.requireCustomPanel(customPanelIdFromPath(url, 'pin'));
+    sendJson(response, 200, { success: true, data: await this.panelsStore.pin(panel.id, principal.username) });
+  }
+
   public async deleteCustomPanel(url: URL, response: ServerResponse): Promise<void> {
     const panel = await this.panelsStore.delete(customPanelIdFromPath(url));
     try {

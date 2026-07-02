@@ -267,16 +267,19 @@ function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
 }
 
-function toLocalInput(date) {
+function toLocalInput(date, includeSeconds = false) {
   const pad = (value) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const value = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return includeSeconds ? `${value}:${pad(date.getSeconds())}` : value;
 }
 
 function setDefaultTimeRange() {
-  const end = new Date();
-  const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+  const now = new Date();
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+  const start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   el.startTime.value = toLocalInput(start);
-  el.endTime.value = toLocalInput(end);
+  el.endTime.value = toLocalInput(end, true);
 }
 
 function localInputToIso(value) {
@@ -1017,6 +1020,18 @@ async function deleteCustomPanel(id) {
   }
 }
 
+async function pinCustomPanel(id) {
+  showCustomPanelError('');
+  try {
+    await api(`/api/grafana/custom-panels/${encodeURIComponent(id)}/pin`, { method: 'POST' });
+    resetPagination('customPanels');
+    await loadGrafanaEmbedConfig();
+    showCustomPanelError('置顶成功。', 'ok');
+  } catch (error) {
+    showCustomPanelError(error instanceof Error ? error.message : '置顶自定义面板失败');
+  }
+}
+
 function downloadJson(filename, data) {
   const blob = new Blob([`${JSON.stringify(data, null, 2)}\n`], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -1117,6 +1132,7 @@ function renderCustomPanels() {
       `<td class="mono">${escapeHtml(formatTime(panel.publishedAt))}</td>` +
       `<td><div class="row-actions">
         <button class="secondary small" data-action="edit-custom-panel" data-panel-id="${escapeHtml(panel.id)}">编辑</button>
+        <button class="secondary small" data-action="pin-custom-panel" data-panel-id="${escapeHtml(panel.id)}">置顶</button>
         ${retryButton}
         <button class="danger small" data-action="delete-custom-panel" data-panel-id="${escapeHtml(panel.id)}">删除</button>
       </div></td>`;
@@ -1869,6 +1885,7 @@ function bindEvents() {
     if (!panelId) return;
     if (button.dataset.action === 'edit-custom-panel') editCustomPanel(panelId);
     if (button.dataset.action === 'publish-custom-panel') await publishCustomPanel(panelId);
+    if (button.dataset.action === 'pin-custom-panel') await pinCustomPanel(panelId);
     if (button.dataset.action === 'delete-custom-panel') await deleteCustomPanel(panelId);
   });
   el.usersBody.addEventListener('click', async (event) => {
