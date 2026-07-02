@@ -380,6 +380,20 @@ export class GrafanaPanelStore {
     return panel;
   }
 
+  public async pin(id: string, actor: string): Promise<GrafanaCustomPanelRecord> {
+    const existing = await this.find(id);
+    if (!existing) throw Object.assign(new Error('Custom panel not found'), { statusCode: 404 });
+    await this.postgres.query(`
+      UPDATE grafana_custom_panels
+      SET updated_at = ${pgString(new Date().toISOString())},
+          updated_by = ${pgString(actor)}
+      WHERE id = ${pgString(id)}
+    `);
+    const panel = await this.find(id);
+    if (!panel) throw Object.assign(new Error('Custom panel not found'), { statusCode: 404 });
+    return panel;
+  }
+
   public async delete(id: string): Promise<GrafanaCustomPanelRecord> {
     const existing = await this.find(id);
     if (!existing) throw Object.assign(new Error('Custom panel not found'), { statusCode: 404 });

@@ -116,6 +116,12 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === 'POST' && /^\/api\/grafana\/custom-panels\/[^/]+\/pin$/.test(url.pathname)) {
+      const principal = await auth.authorize(request, 'dashboards:write');
+      await grafanaRoutes.pinCustomPanel(url, response, principal);
+      return;
+    }
+
     if (request.method === 'DELETE' && /^\/api\/grafana\/custom-panels\/[^/]+$/.test(url.pathname)) {
       await auth.authorize(request, 'dashboards:write');
       await grafanaRoutes.deleteCustomPanel(url, response);
