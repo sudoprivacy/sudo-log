@@ -177,6 +177,22 @@ function isAllowedGrafanaPostPath(path: string): boolean {
   );
 }
 
+function isBlockedProxyResponseHeader(name: string): boolean {
+  return [
+    'connection',
+    'content-encoding',
+    'content-length',
+    'keep-alive',
+    'proxy-authenticate',
+    'proxy-authorization',
+    'set-cookie',
+    'te',
+    'trailer',
+    'transfer-encoding',
+    'upgrade',
+  ].includes(name);
+}
+
 function customPanelImportItems(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
   if (value && typeof value === 'object' && Array.isArray((value as { panels?: unknown }).panels)) {
@@ -600,15 +616,20 @@ export class GrafanaRoutes {
     const responseHeaders: Record<string, string> = {};
     upstreamResponse.headers.forEach((value, name) => {
       const lowerName = name.toLowerCase();
-      if (['content-encoding', 'content-length', 'set-cookie', 'transfer-encoding'].includes(lowerName)) return;
+      if (isBlockedProxyResponseHeader(lowerName)) return;
       responseHeaders[name] = value;
     });
+    const responseBody =
+      request.method === 'HEAD' || upstreamResponse.status === 204 || upstreamResponse.status === 304
+        ? null
+        : Buffer.from(await upstreamResponse.arrayBuffer());
+    if (responseBody) responseHeaders['content-length'] = String(responseBody.byteLength);
     response.writeHead(upstreamResponse.status, responseHeaders);
-    if (request.method === 'HEAD') {
+    if (!responseBody) {
       response.end();
       return;
     }
-    response.end(Buffer.from(await upstreamResponse.arrayBuffer()));
+    response.end(responseBody);
   }
 
   public proxyUpgrade(request: IncomingMessage, socket: Duplex, head: Buffer, url: URL): void {
