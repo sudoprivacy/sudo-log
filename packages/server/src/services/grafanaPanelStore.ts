@@ -368,6 +368,19 @@ export class GrafanaPanelStore {
     return panel;
   }
 
+  public async markProductPublished(tenantId: string, product: string, ids: string[]): Promise<void> {
+    if (!ids.length) return;
+    const publishedAt = new Date().toISOString();
+    await this.postgres.query(`
+      UPDATE grafana_custom_panels
+      SET published_at = ${pgString(publishedAt)},
+          publish_error = ''
+      WHERE tenant_id = ${pgString(normalizeIdentifier(tenantId))}
+        AND product = ${pgString(normalizeIdentifier(product))}
+        AND id IN (${ids.map(pgString).join(', ')})
+    `);
+  }
+
   public async markPublishError(id: string, error: string): Promise<GrafanaCustomPanelRecord> {
     await this.postgres.query(`
       UPDATE grafana_custom_panels
@@ -378,6 +391,18 @@ export class GrafanaPanelStore {
     const panel = await this.find(id);
     if (!panel) throw Object.assign(new Error('Custom panel not found'), { statusCode: 404 });
     return panel;
+  }
+
+  public async markProductPublishError(tenantId: string, product: string, ids: string[], error: string): Promise<void> {
+    if (!ids.length) return;
+    await this.postgres.query(`
+      UPDATE grafana_custom_panels
+      SET published_at = '',
+          publish_error = ${pgString(error.slice(0, 1000))}
+      WHERE tenant_id = ${pgString(normalizeIdentifier(tenantId))}
+        AND product = ${pgString(normalizeIdentifier(product))}
+        AND id IN (${ids.map(pgString).join(', ')})
+    `);
   }
 
   public async pin(id: string, actor: string): Promise<GrafanaCustomPanelRecord> {

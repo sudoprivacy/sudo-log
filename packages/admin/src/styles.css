@@ -810,9 +810,7 @@ tbody tr:hover {
 }
 
 .dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  display: block;
 }
 
 .dashboard-custom {
@@ -950,6 +948,10 @@ tbody tr:hover {
   width: 100%;
   border: 0;
   background: #fff;
+}
+
+.dashboard-full {
+  min-height: 520px;
 }
 
 .dashboard-panel-loading {
@@ -1236,10 +1238,6 @@ pre {
 
   .dashboard-controls {
     grid-template-columns: repeat(3, minmax(130px, 1fr));
-  }
-
-  .dashboard-grid {
-    grid-template-columns: 1fr;
   }
 
   .custom-panel-form {

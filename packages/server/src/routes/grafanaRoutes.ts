@@ -6,7 +6,12 @@ import type { AppConfig } from '../config/appConfig.js';
 import type { ClickHouseRepository } from '../db/clickhouse.js';
 import { readJsonBody, sendJson } from '../http/http.js';
 import type { Principal } from '../services/authService.js';
-import { GrafanaDashboardPublisher } from '../services/grafanaDashboardPublisher.js';
+import {
+  GrafanaDashboardPublisher,
+  grafanaProductDashboardHeight,
+  grafanaProductDashboardSlug,
+  grafanaProductDashboardUid,
+} from '../services/grafanaDashboardPublisher.js';
 import { isGrafanaPanelType, renderGrafanaPanelTestQuery, validateGrafanaPanelQuery } from '../services/grafanaPanelSql.js';
 import type { GrafanaPanelStore } from '../services/grafanaPanelStore.js';
 import type { SettingsStore } from '../services/settingsStore.js';
@@ -264,6 +269,7 @@ function writeUpgradeError(socket: Duplex, statusCode: number, message: string):
 export class GrafanaRoutes {
   private readonly basePath: string;
   private readonly publisher: GrafanaDashboardPublisher;
+  private readonly ensuredProductDashboards = new Set<string>();
 
   public constructor(
     private readonly config: AppConfig,
@@ -289,21 +295,34 @@ export class GrafanaRoutes {
     const product = safeVariable(url.searchParams.get('product') || 'sudowork', 'sudowork').toLowerCase();
     await this.settings.requireEnabledProduct(tenantId, product);
 
+    const customPanels = await this.panelsStore.list(tenantId, product, true);
+    const defaultPanel = customPanels[0] || null;
+    const range = selectedTimeRange(url.searchParams.get('from') || defaultPanel?.from || null);
+    const environment = safeVariable(url.searchParams.get('environment') || defaultPanel?.environment || 'production', 'production');
     const tagKeys = await this.repository.grafanaTagKeys(tenantId, product);
     const defaultTagKey = safeTagKey(this.config.grafana.defaultTagKey, 'feature');
-    const rawTagKey = url.searchParams.has('tag_key') ? url.searchParams.get('tag_key') || '' : '';
+    const rawTagKey = url.searchParams.has('tag_key') ? url.searchParams.get('tag_key') || '' : defaultPanel?.tagKey || '';
     const requestedTagKey = rawTagKey ? safeTagKey(rawTagKey, defaultTagKey) : '';
     const selectedTagKey =
       !requestedTagKey || tagKeys.includes(requestedTagKey) || requestedTagKey === defaultTagKey
         ? requestedTagKey
         : tagKeys[0] || defaultTagKey;
     const tagValues = selectedTagKey ? await this.repository.grafanaTagValues(tenantId, product, selectedTagKey) : [];
-    const rawTagValue = url.searchParams.has('tag_value') ? url.searchParams.get('tag_value') || '' : '';
+    const rawTagValue = url.searchParams.has('tag_value') ? url.searchParams.get('tag_value') || '' : defaultPanel?.tagValue || '';
     const requestedTagValue = safeVariable(rawTagValue, '');
     const selectedTagValue = requestedTagValue ? (tagValues.includes(requestedTagValue) ? requestedTagValue : tagValues[0] || '') : '';
     const normalizedTagKeys = [...new Set([selectedTagKey, ...tagKeys, defaultTagKey].filter(Boolean))];
     const normalizedTagValues = [...new Set([selectedTagValue, ...tagValues].filter(Boolean))];
-    const customPanels = await this.panelsStore.list(tenantId, product, true);
+    if (customPanels.length) await this.ensureProductDashboard(tenantId, product);
+    const dashboard = customPanels.length
+      ? this.productDashboard(customPanels, {
+        from: range.from,
+        to: range.to,
+        environment,
+        tagKey: selectedTagKey,
+        tagValue: selectedTagValue,
+      })
+      : null;
 
     sendJson(
       response,
@@ -318,21 +337,19 @@ export class GrafanaRoutes {
           tag_keys: normalizedTagKeys,
           tag_values: normalizedTagValues,
           selected: {
-            from: '',
-            to: '',
-            environment: '',
+            from: range.from,
+            to: range.to,
+            environment,
             tag_key: selectedTagKey,
             tag_value: selectedTagValue,
           },
-          panels: customPanels.map((panel) =>
-            this.customPanel(panel, {
-              from: panel.from,
-              to: panel.to,
-              environment: panel.environment,
-              tagKey: panel.tagKey,
-              tagValue: panel.tagValue,
-            }),
-          ),
+          dashboard,
+          panels: customPanels.map((panel) => ({
+            id: panel.id,
+            title: panel.title,
+            height: panel.height,
+            custom: true,
+          })),
         },
       },
       {
@@ -362,7 +379,7 @@ export class GrafanaRoutes {
     await this.settings.requireEnabledProduct(tenantId, product);
     const input = this.customPanelInput(body, tenantId, product, principal.username);
     const panel = await this.panelsStore.create(input);
-    sendJson(response, 201, { success: true, data: await this.publishAndRecord(panel) });
+    sendJson(response, 201, { success: true, data: await this.publishProductAndReturnPanel(panel) });
   }
 
   public async importCustomPanels(request: IncomingMessage, response: ServerResponse, principal: Principal): Promise<void> {
@@ -386,9 +403,9 @@ export class GrafanaRoutes {
       const deletedPanels = await this.panelsStore.deleteByProduct(tenantId, product);
       for (const panel of deletedPanels) {
         try {
-          await this.publisher.delete(panel);
+          await this.publisher.deletePanelDashboard(panel);
         } catch (error) {
-          console.warn('sudo-log could not delete replaced custom Grafana dashboard', error);
+          console.warn('sudo-log could not delete replaced legacy custom Grafana panel dashboard', error);
         }
       }
     }
@@ -400,8 +417,11 @@ export class GrafanaRoutes {
       const result = mode === 'replace' ? { panel: await this.panelsStore.create(input), created: true } : await this.panelsStore.upsertByTitle(input);
       created += result.created ? 1 : 0;
       updated += result.created ? 0 : 1;
-      panels.push(await this.publishAndRecord(result.panel));
+      panels.push(result.panel);
     }
+    await this.publishProductDashboard(tenantId, product);
+    const refreshedPanels = await this.panelsStore.list(tenantId, product);
+    const refreshedById = new Map(refreshedPanels.map((panel) => [panel.id, panel]));
 
     sendJson(response, 200, {
       success: true,
@@ -411,7 +431,7 @@ export class GrafanaRoutes {
         created,
         updated,
         replaced: mode === 'replace',
-        panels,
+        panels: panels.map((panel) => refreshedById.get(panel.id) || panel),
       },
     });
   }
@@ -492,7 +512,7 @@ export class GrafanaRoutes {
       publishedAt: now,
       publishError: '',
     };
-    const published = await this.publisher.publish(panel);
+    const published = await this.publisher.publishPreview(panel);
     if (!published) {
       throw Object.assign(new Error('Grafana preview publish failed'), { statusCode: 400 });
     }
@@ -532,28 +552,32 @@ export class GrafanaRoutes {
       enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
       actor: principal.username,
     });
-    sendJson(response, 200, { success: true, data: await this.publishAndRecord(panel) });
+    const previousProductChanged = existing.tenantId !== panel.tenantId || existing.product !== panel.product;
+    if (previousProductChanged) await this.publishProductDashboard(existing.tenantId, existing.product);
+    sendJson(response, 200, { success: true, data: await this.publishProductAndReturnPanel(panel) });
   }
 
   public async publishCustomPanel(url: URL, response: ServerResponse): Promise<void> {
     const panel = await this.requireCustomPanel(customPanelIdFromPath(url, 'publish'));
     this.requireGrafanaPublishing(panel);
     validateGrafanaPanelQuery(panel.querySql, panel.panelType, this.config.clickhouse);
-    sendJson(response, 200, { success: true, data: await this.publishAndRecord(panel) });
+    sendJson(response, 200, { success: true, data: await this.publishProductAndReturnPanel(panel) });
   }
 
   public async pinCustomPanel(url: URL, response: ServerResponse, principal: Principal): Promise<void> {
     const panel = await this.requireCustomPanel(customPanelIdFromPath(url, 'pin'));
-    sendJson(response, 200, { success: true, data: await this.panelsStore.pin(panel.id, principal.username) });
+    const pinned = await this.panelsStore.pin(panel.id, principal.username);
+    sendJson(response, 200, { success: true, data: await this.publishProductAndReturnPanel(pinned) });
   }
 
   public async deleteCustomPanel(url: URL, response: ServerResponse): Promise<void> {
     const panel = await this.panelsStore.delete(customPanelIdFromPath(url));
     try {
-      await this.publisher.delete(panel);
+      await this.publisher.deletePanelDashboard(panel);
     } catch (error) {
-      console.warn('sudo-log could not delete custom Grafana dashboard', error);
+      console.warn('sudo-log could not delete legacy custom Grafana panel dashboard', error);
     }
+    await this.publishProductDashboard(panel.tenantId, panel.product);
     sendJson(response, 200, { success: true });
   }
 
@@ -692,6 +716,37 @@ export class GrafanaRoutes {
     socket.on('error', () => upstream.destroy());
   }
 
+  private productDashboard(
+    panels: GrafanaCustomPanelRecord[],
+    input: { from: string; to: string; environment: string; tagKey: string; tagValue: string },
+  ): { id: string; title: string; height: number; iframe_url: string; custom: boolean; refresh: string } {
+    const tenantId = panels[0]?.tenantId || '';
+    const product = panels[0]?.product || '';
+    const params = new URLSearchParams({
+      orgId: this.config.grafana.orgId,
+      from: input.from,
+      to: input.to,
+      'var-tenant_id': tenantId,
+      'var-product': product,
+      'var-environment': input.environment,
+      'var-tag_key': input.tagKey,
+      'var-tag_value': input.tagValue,
+      refresh: '30s',
+      theme: 'light',
+      kiosk: '',
+    });
+    const uid = grafanaProductDashboardUid(tenantId, product);
+    const slug = grafanaProductDashboardSlug(tenantId, product);
+    return {
+      id: uid,
+      title: `Sudo Log - ${tenantId}/${product}`,
+      height: grafanaProductDashboardHeight(panels),
+      iframe_url: `${this.basePath}/d/${encodeURIComponent(uid)}/${encodeURIComponent(slug)}?${params.toString()}`,
+      custom: true,
+      refresh: '30s',
+    };
+  }
+
   private customPanel(
     panel: GrafanaCustomPanelRecord,
     input: { from: string; to: string; environment: string; tagKey: string; tagValue: string },
@@ -801,16 +856,44 @@ export class GrafanaRoutes {
     }
   }
 
-  private async publishAndRecord(panel: GrafanaCustomPanelRecord): Promise<GrafanaCustomPanelRecord> {
-    if (!panel.enabled) return panel;
+  private productDashboardFilters(panels: GrafanaCustomPanelRecord[]): { from: string; to: string; environment: string; tagKey: string; tagValue: string } {
+    const panel = panels[0];
+    return {
+      from: panel?.from || 'now-6h',
+      to: panel?.to || 'now',
+      environment: panel?.environment || 'production',
+      tagKey: panel?.tagKey || this.config.grafana.defaultTagKey,
+      tagValue: panel?.tagValue || '',
+    };
+  }
+
+  private async publishProductDashboard(tenantId: string, product: string): Promise<boolean> {
+    const panels = (await this.panelsStore.list(tenantId, product)).filter((panel) => panel.enabled);
     try {
-      const published = await this.publisher.publish(panel);
-      if (!published) return panel;
-      return this.panelsStore.markPublished(panel.id);
+      for (const panel of panels) validateGrafanaPanelQuery(panel.querySql, panel.panelType, this.config.clickhouse);
+      const published = await this.publisher.publishProductDashboard(tenantId, product, panels, this.productDashboardFilters(panels));
+      if (!published) return false;
+      await this.panelsStore.markProductPublished(tenantId, product, panels.map((panel) => panel.id));
+      this.ensuredProductDashboards.add(`${tenantId}:${product}`);
+      return true;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Grafana publish failed';
-      return this.panelsStore.markPublishError(panel.id, message);
+      await this.panelsStore.markProductPublishError(tenantId, product, panels.map((panel) => panel.id), message);
+      return false;
     }
+  }
+
+  private async ensureProductDashboard(tenantId: string, product: string): Promise<void> {
+    const key = `${tenantId}:${product}`;
+    if (this.ensuredProductDashboards.has(key)) return;
+    if (await this.publishProductDashboard(tenantId, product)) {
+      this.ensuredProductDashboards.add(key);
+    }
+  }
+
+  private async publishProductAndReturnPanel(panel: GrafanaCustomPanelRecord): Promise<GrafanaCustomPanelRecord> {
+    await this.publishProductDashboard(panel.tenantId, panel.product);
+    return (await this.panelsStore.find(panel.id)) || panel;
   }
 
 }

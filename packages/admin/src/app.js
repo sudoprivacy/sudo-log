@@ -4,15 +4,8 @@ const DEFAULT_TENANT_ID = 'sudo';
 const DEFAULT_PRODUCT_ID = 'sudowork';
 const DEFAULT_PAGE_SIZE = 20;
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
-const DASHBOARD_PANEL_LOAD_CONCURRENCY = 2;
-const DASHBOARD_PANEL_LOAD_SLOT_TIMEOUT_MS = 30_000;
-const DASHBOARD_PANEL_LOAD_STAGGER_MS = 250;
 
-let dashboardPanelObserver = null;
-let dashboardPanelLoadQueue = [];
-let dashboardPanelActiveLoads = 0;
-let dashboardPanelLoadGeneration = 0;
-let dashboardPanelDrainTimer = 0;
+let dashboardFrameGeneration = 0;
 
 const state = {
   token: localStorage.getItem(TOKEN_KEY) || '',
@@ -758,8 +751,7 @@ async function loadGrafanaEmbedConfig() {
   el.customPanelsPanel.classList.toggle('hidden', !(canManageDashboards() && state.activeView === 'panelManager'));
   if (!params) {
     state.grafana.config = null;
-    resetDashboardPanelLoading();
-    el.dashboardPanels.innerHTML = '';
+    clearDashboardFrame();
     el.dashboardEmpty.textContent = '暂无启用的租户或产品。';
     el.dashboardEmpty.classList.remove('hidden');
     return;
@@ -775,8 +767,7 @@ async function loadGrafanaEmbedConfig() {
     await loadCustomPanels();
   } catch (error) {
     state.grafana.config = null;
-    resetDashboardPanelLoading();
-    el.dashboardPanels.innerHTML = '';
+    clearDashboardFrame();
     el.dashboardEmpty.classList.add('hidden');
     showDashboardError(error instanceof Error ? error.message : '加载 Dashboard 失败');
   } finally {
@@ -805,8 +796,7 @@ async function loadCustomPanels() {
 
 function renderDashboardConfig(config) {
   if (!config?.enabled) {
-    resetDashboardPanelLoading();
-    el.dashboardPanels.innerHTML = '';
+    clearDashboardFrame();
     el.dashboardEmpty.textContent = 'Dashboard 未启用。';
     el.dashboardEmpty.classList.remove('hidden');
     return;
@@ -817,144 +807,57 @@ function renderDashboardConfig(config) {
   el.dashboardEnvironment.value = selected.environment || el.dashboardEnvironment.value || '';
   el.dashboardTagKey.value = selected.tag_key || el.dashboardTagKey.value || '';
   el.dashboardTagValue.value = selected.tag_value || el.dashboardTagValue.value || '';
-  renderDashboardPanels(config.panels || []);
-}
-
-function resetDashboardPanelLoading() {
-  dashboardPanelLoadGeneration += 1;
-  if (dashboardPanelObserver) dashboardPanelObserver.disconnect();
-  dashboardPanelObserver = null;
-  dashboardPanelLoadQueue = [];
-  dashboardPanelActiveLoads = 0;
-  if (dashboardPanelDrainTimer) {
-    clearTimeout(dashboardPanelDrainTimer);
-    dashboardPanelDrainTimer = 0;
+  if (state.activeView === 'dashboard') {
+    renderDashboardFrame(config.dashboard);
+  } else {
+    clearDashboardFrame();
   }
 }
 
-function queueDashboardPanelDrain(delay = 0) {
-  if (dashboardPanelDrainTimer) return;
-  dashboardPanelDrainTimer = setTimeout(() => {
-    dashboardPanelDrainTimer = 0;
-    drainDashboardPanelLoadQueue();
-  }, delay);
+function clearDashboardFrame() {
+  dashboardFrameGeneration += 1;
+  el.dashboardPanels.innerHTML = '';
 }
 
-function enqueueDashboardPanelFrame(frame, generation = dashboardPanelLoadGeneration) {
-  if (!frame || generation !== dashboardPanelLoadGeneration || frame.dataset.loadState) return;
-  frame.dataset.loadState = 'queued';
-  frame.closest('.dashboard-panel')?.classList.add('is-queued');
-  dashboardPanelLoadQueue.push({ frame, generation });
-  queueDashboardPanelDrain();
-}
+function renderDashboardFrame(dashboard) {
+  clearDashboardFrame();
+  const iframeUrl = typeof dashboard?.iframe_url === 'string' && dashboard.iframe_url.startsWith('/grafana/') ? dashboard.iframe_url : '';
+  el.dashboardEmpty.textContent = '暂无可展示的 dashboard。';
+  el.dashboardEmpty.classList.toggle('hidden', Boolean(iframeUrl));
+  if (!iframeUrl) return;
 
-function drainDashboardPanelLoadQueue() {
-  if (state.activeView !== 'dashboard') return;
-  while (dashboardPanelActiveLoads < DASHBOARD_PANEL_LOAD_CONCURRENCY && dashboardPanelLoadQueue.length > 0) {
-    const item = dashboardPanelLoadQueue.shift();
-    if (!item || item.generation !== dashboardPanelLoadGeneration || !item.frame.isConnected || item.frame.dataset.loadState !== 'queued') continue;
-    loadDashboardPanelFrame(item.frame, item.generation);
-  }
-}
-
-function loadDashboardPanelFrame(frame, generation) {
-  const iframeUrl = frame.dataset.src || '';
-  if (!iframeUrl || generation !== dashboardPanelLoadGeneration) return;
-  const panel = frame.closest('.dashboard-panel');
-  dashboardPanelActiveLoads += 1;
-  frame.dataset.loadState = 'loading';
-  panel?.classList.remove('is-pending', 'is-queued');
-  panel?.classList.add('is-loading');
-
-  let released = false;
-  const releaseSlot = () => {
-    if (released) return;
-    released = true;
-    if (generation !== dashboardPanelLoadGeneration) return;
-    dashboardPanelActiveLoads = Math.max(0, dashboardPanelActiveLoads - 1);
-    queueDashboardPanelDrain(DASHBOARD_PANEL_LOAD_STAGGER_MS);
-  };
-
-  const timeout = setTimeout(releaseSlot, DASHBOARD_PANEL_LOAD_SLOT_TIMEOUT_MS);
-  frame.addEventListener(
+  const generation = dashboardFrameGeneration;
+  const article = document.createElement('article');
+  article.className = 'dashboard-panel dashboard-full is-loading';
+  article.innerHTML = `<iframe
+    title="${escapeHtml(dashboard.title || 'Grafana dashboard')}"
+    src="${escapeHtml(iframeUrl)}"
+    style="height: ${Math.max(520, Math.min(Number(dashboard.height) || 720, 8000))}px"
+    loading="eager"
+    referrerpolicy="no-referrer"
+    sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+  ></iframe>
+  <div class="dashboard-panel-loading">Dashboard 加载中...</div>
+  <div class="dashboard-panel-error">Dashboard 加载失败。</div>`;
+  article.querySelector('iframe')?.addEventListener(
     'load',
     () => {
-      clearTimeout(timeout);
-      panel?.classList.remove('is-loading');
-      panel?.classList.add('is-loaded');
-      frame.dataset.loadState = 'loaded';
-      releaseSlot();
+      if (generation !== dashboardFrameGeneration) return;
+      article.classList.remove('is-loading');
+      article.classList.add('is-loaded');
     },
     { once: true },
   );
-  frame.addEventListener(
+  article.querySelector('iframe')?.addEventListener(
     'error',
     () => {
-      clearTimeout(timeout);
-      panel?.classList.remove('is-loading');
-      panel?.classList.add('has-error');
-      frame.dataset.loadState = 'error';
-      releaseSlot();
+      if (generation !== dashboardFrameGeneration) return;
+      article.classList.remove('is-loading');
+      article.classList.add('has-error');
     },
     { once: true },
   );
-  frame.src = iframeUrl;
-}
-
-function initializeDashboardPanelLoading() {
-  const generation = dashboardPanelLoadGeneration;
-  const frames = [...el.dashboardPanels.querySelectorAll('iframe[data-src]')];
-  if (!frames.length) return;
-
-  for (const frame of frames.slice(0, DASHBOARD_PANEL_LOAD_CONCURRENCY)) {
-    enqueueDashboardPanelFrame(frame, generation);
-  }
-
-  if (!('IntersectionObserver' in window)) {
-    frames.forEach((frame, index) => {
-      setTimeout(() => enqueueDashboardPanelFrame(frame, generation), index * DASHBOARD_PANEL_LOAD_STAGGER_MS);
-    });
-    return;
-  }
-
-  dashboardPanelObserver = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        dashboardPanelObserver?.unobserve(entry.target);
-        enqueueDashboardPanelFrame(entry.target, generation);
-      }
-    },
-    { rootMargin: '700px 0px' },
-  );
-  for (const frame of frames) dashboardPanelObserver.observe(frame);
-}
-
-function renderDashboardPanels(panels) {
-  resetDashboardPanelLoading();
-  el.dashboardPanels.innerHTML = '';
-  el.dashboardEmpty.textContent = '暂无可展示的 panels。';
-  el.dashboardEmpty.classList.toggle('hidden', panels.length > 0);
-
-  for (const panel of panels) {
-    const iframeUrl = typeof panel.iframe_url === 'string' && panel.iframe_url.startsWith('/grafana/') ? panel.iframe_url : '';
-    if (!iframeUrl) continue;
-    const article = document.createElement('article');
-    article.className = 'dashboard-panel is-pending';
-    article.innerHTML = `<iframe
-      title="${escapeHtml(panel.title || panel.id || 'Grafana panel')}"
-      data-src="${escapeHtml(iframeUrl)}"
-      style="height: ${Math.max(220, Math.min(Number(panel.height) || 260, 640))}px"
-      loading="lazy"
-      referrerpolicy="no-referrer"
-      sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-    ></iframe>
-    <div class="dashboard-panel-loading">Panel 加载中...</div>
-    <div class="dashboard-panel-error">Panel 加载失败。</div>`;
-    article.querySelector('iframe')?.addEventListener('error', () => article.classList.add('has-error'));
-    el.dashboardPanels.appendChild(article);
-  }
-  initializeDashboardPanelLoading();
+  el.dashboardPanels.appendChild(article);
 }
 
 function refreshDashboardPanels() {
@@ -1939,6 +1842,7 @@ function setView(view) {
   el.systemView.classList.toggle('hidden', view !== 'system');
   el.usersView.classList.toggle('hidden', view !== 'users');
   el.settingsView.classList.toggle('hidden', view !== 'settings');
+  if (view !== 'dashboard') clearDashboardFrame();
   if (view === 'dashboard') loadGrafanaEmbedConfig();
   if (view === 'panelManager') loadGrafanaEmbedConfig();
   if (view === 'system') loadSystem();
