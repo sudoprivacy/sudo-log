@@ -112,7 +112,7 @@ export class GrafanaDashboardPublisher {
           type: panel.panelType,
         },
       ],
-      refresh: '',
+      refresh: '30s',
       schemaVersion: 39,
       tags: ['sudo-log', 'custom-panel', panel.tenantId, panel.product],
       templating: {

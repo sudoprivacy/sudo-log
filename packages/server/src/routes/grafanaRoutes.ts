@@ -706,6 +706,7 @@ export class GrafanaRoutes {
       'var-environment': input.environment,
       'var-tag_key': input.tagKey,
       'var-tag_value': input.tagValue,
+      refresh: '30s',
       theme: 'light',
     });
     return {
