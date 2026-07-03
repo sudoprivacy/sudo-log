@@ -168,6 +168,15 @@ function isAllowedGrafanaPath(pathname: string, basePath: string): boolean {
   );
 }
 
+function isAllowedGrafanaPostPath(path: string): boolean {
+  return (
+    path === '/api/ds/query' ||
+    path === '/api/frontend-metrics' ||
+    path === '/api/query-history' ||
+    /^\/apis\/features\.grafana\.app\/[^/]+\/namespaces\/[^/]+\/ofrep\/v\d+\/evaluate\/flags$/.test(path)
+  );
+}
+
 function customPanelImportItems(value: unknown): unknown[] {
   if (Array.isArray(value)) return value;
   if (value && typeof value === 'object' && Array.isArray((value as { panels?: unknown }).panels)) {
@@ -549,9 +558,7 @@ export class GrafanaRoutes {
     }
     if (
       request.method === 'POST' &&
-      grafanaPath !== '/api/ds/query' &&
-      grafanaPath !== '/api/frontend-metrics' &&
-      grafanaPath !== '/api/query-history'
+      !isAllowedGrafanaPostPath(grafanaPath)
     ) {
       sendJson(response, 403, { success: false, error: 'Grafana write path is not allowed' });
       return;
