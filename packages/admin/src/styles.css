@@ -938,6 +938,7 @@ tbody tr:hover {
 
 .dashboard-panel {
   min-width: 0;
+  position: relative;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -949,6 +950,28 @@ tbody tr:hover {
   width: 100%;
   border: 0;
   background: #fff;
+}
+
+.dashboard-panel-loading {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: center;
+  background: #fff;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.dashboard-panel.is-pending .dashboard-panel-loading,
+.dashboard-panel.is-queued .dashboard-panel-loading,
+.dashboard-panel.is-loading .dashboard-panel-loading {
+  display: grid;
+}
+
+.dashboard-panel.is-loaded .dashboard-panel-loading,
+.dashboard-panel.has-error .dashboard-panel-loading {
+  display: none;
 }
 
 .dashboard-panel-error {
